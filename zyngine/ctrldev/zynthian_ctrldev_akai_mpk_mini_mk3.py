@@ -499,7 +499,7 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(
     def refresh(self):
         pass
 
-    def update_mixer_strip(self, chan, symbol, value):
+    def update_mixer_strip(self, chan, symbol, value, mixbus=False):
         pass
 
     def update_mixer_active_chain(self, active_chain):
