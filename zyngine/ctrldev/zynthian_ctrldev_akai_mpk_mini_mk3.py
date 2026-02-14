@@ -412,6 +412,13 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(
     def init(self):
         super().init()
         self.refresh()
+        logging.error(f"MPK INIT: All chains: {list(self.chain_manager.chains.keys())}")
+        logging.error(f"MPK INIT: Filtered chains: {self.chain_ids_filtered}")
+        logging.error(f"MPK INIT: Chain type filter: {self.chain_type_filter}")
+        for i, cid in enumerate(self.chain_ids_filtered[:4]):
+            chain = self.chain_manager.chains.get(cid)
+            if chain:
+                logging.error(f"MPK INIT: Chain {i} (id={cid}): midi_chan={chain.midi_chan}")
         for signal, subsignal, callback in self._signals:
             zynsigman.register(signal, subsignal, callback)
         self._save_mpk_program()
