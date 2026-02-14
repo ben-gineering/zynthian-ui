@@ -411,7 +411,10 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(
 
     def init(self):
         super().init()
+        logging.error(f"MPK BEFORE REFRESH: filter={self.chain_type_filter} type={type(self.chain_type_filter)}")
+        logging.error(f"MPK BEFORE REFRESH: chains.keys()={list(self.chain_manager.chains.keys())}")
         self.refresh()
+        logging.error(f"MPK AFTER REFRESH: chain_ids_filtered={self.chain_ids_filtered}")
         logging.error(f"MPK INIT: All chains: {list(self.chain_manager.chains.keys())}")
         logging.error(f"MPK INIT: Filtered chains: {self.chain_ids_filtered}")
         logging.error(f"MPK INIT: Chain type filter: {self.chain_type_filter}")
