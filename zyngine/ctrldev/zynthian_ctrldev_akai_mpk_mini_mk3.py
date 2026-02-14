@@ -698,7 +698,7 @@ class MixerHandler(ModeHandlerBase):
         chain = self._chain_manager.get_chain_by_index(index)
         if chain is None or chain.chain_id == 0:
             return False
-        mixer_chan = chain.mixer_chan
+        mixer_chan = chain.zynmixer_proc.mixer_chan
 
         if type == "level":
             value = self._zynmixer.get_level(mixer_chan)
