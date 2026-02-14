@@ -30,8 +30,16 @@ from bisect import bisect
 from zyncoder.zyncore import lib_zyncore
 from zyngine.zynthian_signal_manager import zynsigman
 
-from zyngine.ctrldev.zynthian_ctrldev_base import zynthian_ctrldev_zynmixer
-from zyngine.ctrldev.zynthian_ctrldev_base_extended import CONST, KnobSpeedControl, IntervalTimer, ButtonTimer
+from zyngine.ctrldev.zynthian_ctrldev_base import (
+    zynthian_ctrldev_zynpad,
+    zynthian_ctrldev_zynmixer,
+)
+from zyngine.ctrldev.zynthian_ctrldev_base_extended import (
+    CONST,
+    KnobSpeedControl,
+    IntervalTimer,
+    ButtonTimer,
+)
 from zyngine.ctrldev.zynthian_ctrldev_base_ui import ModeHandlerBase
 
 
@@ -54,7 +62,7 @@ MANUFACTURER_ID = 0x47
 PRODUCT_ID = 0x49
 DATA_MSG_LEN = 252
 MSG_PAYLOAD_LEN = 246
-MSG_DIRECTION_OUT = 0x7f
+MSG_DIRECTION_OUT = 0x7F
 MSG_DIRECTION_IN = 0x00
 
 # Command values
@@ -75,7 +83,7 @@ KEY_OCTAVE_MIN = 0x00
 KEY_OCTAVE_MAX = 0x08
 
 # Arpeggiator settings
-ARP_ON = 0x7f
+ARP_ON = 0x7F
 ARP_OFF = 0x00
 ARP_OCTAVE_MIN = 0x00
 ARP_OCTAVE_MAX = 0x03
@@ -126,8 +134,8 @@ PROG_MIXER_MODE = 0x04
 PROG_DEVICE_MODE = 0x05
 PROG_PATTERN_MODE = 0x06
 PROG_NOTEPAD_MODE = 0x07
-PROG_USER_MODE = 0x0c
-PROG_CONFIG_MODE = 0x0d
+PROG_USER_MODE = 0x0C
+PROG_CONFIG_MODE = 0x0D
 
 PROG_OPEN_MIXER = 0x00
 PROG_OPEN_ZYNPAD = 0x01
@@ -150,8 +158,13 @@ class SysExQueryProgram:
         assert 0 <= program <= 8, "Invalid program number, only 0 (RAM) to 8 available."
 
         self.data = [
-            MANUFACTURER_ID, MSG_DIRECTION_OUT, PRODUCT_ID, CMD_QUERY_DATA,
-            0, 1, program,
+            MANUFACTURER_ID,
+            MSG_DIRECTION_OUT,
+            PRODUCT_ID,
+            CMD_QUERY_DATA,
+            0,
+            1,
+            program,
         ]
 
     def __repr__(self):
@@ -162,38 +175,78 @@ class SysExQueryProgram:
 #  SysEx command for updating a device program/settings
 # --------------------------------------------------------------------------
 class SysExSetProgram:
-    def __init__(self, program=0, name="Zynthian", channels={}, aftertouch=AFTERTOUCH_OFF,
-                 keybed_octave=4, arp={}, tempo_taps=3, tempo=90, joy={},
-                 pads={}, knobs={}, transpose=0x0c):
+    def __init__(
+        self,
+        program=0,
+        name="Zynthian",
+        channels={},
+        aftertouch=AFTERTOUCH_OFF,
+        keybed_octave=4,
+        arp={},
+        tempo_taps=3,
+        tempo=90,
+        joy={},
+        pads={},
+        knobs={},
+        transpose=0x0C,
+    ):
 
         arp_swing = int(arp.get("swing", ARP_SWING_MIN))
         assert 0 <= program <= 8, "Invalid program number: {program} (valid: 0(RAM)-8)."
-        assert aftertouch in [AFTERTOUCH_OFF, AFTERTOUCH_CHANNEL, AFTERTOUCH_POLYPHONIC], \
-            f"Invalid aftertouch mode: {aftertouch} (valid: 0-2)."
-        assert KEY_OCTAVE_MIN <= keybed_octave <= KEY_OCTAVE_MAX, \
+        assert aftertouch in [
+            AFTERTOUCH_OFF,
+            AFTERTOUCH_CHANNEL,
+            AFTERTOUCH_POLYPHONIC,
+        ], f"Invalid aftertouch mode: {aftertouch} (valid: 0-2)."
+        assert KEY_OCTAVE_MIN <= keybed_octave <= KEY_OCTAVE_MAX, (
             f"Invalid keybed octave: {keybed_octave} (valid: 0-8)."
-        assert ARP_SWING_MIN <= arp_swing <= ARP_SWING_MAX, \
+        )
+        assert ARP_SWING_MIN <= arp_swing <= ARP_SWING_MAX, (
             f"Invalid swing value: {arp_swing} (valid: 0-25)."
-        assert TEMPO_TAPS_MIN <= tempo_taps <= TEMPO_TAPS_MAX, \
+        )
+        assert TEMPO_TAPS_MIN <= tempo_taps <= TEMPO_TAPS_MAX, (
             f"Invalid tempo taps: {tempo_taps} (valid: {TEMPO_TAPS_MIN}-{TEMPO_TAPS_MAX})."
+        )
         assert BPM_MIN <= tempo <= BPM_MAX, f"Invalid tempo: {tempo} (valid: 60-240)."
         for c in channels.values():
             assert 0 <= c <= 15, f"Invalid channel number: {c} (valid: 0-15)."
         for field in ["note", "pc", "cc"]:
             assert field in pads, f"Invalid pads definition, missing '{field}' list."
-            assert len(
-                pads[field]) == 16, f"Invalid pads definition, len('{field}') != 16."
+            assert len(pads[field]) == 16, (
+                f"Invalid pads definition, len('{field}') != 16."
+            )
             for v in pads[field]:
                 assert 0 <= v <= 127, f"Invalid pads definition, invalid value: {v}."
         for field in ["mode", "cc", "min", "max", "name"]:
             assert field in knobs, f"Invalid knobs definition, missing '{field}' list."
-            assert len(
-                knobs[field]) == 8, f"Invalid knobs definition, len('{field}') != 8."
+            assert len(knobs[field]) == 8, (
+                f"Invalid knobs definition, len('{field}') != 8."
+            )
 
         self.data = [
-            MANUFACTURER_ID, MSG_DIRECTION_OUT, PRODUCT_ID, CMD_WRITE_DATA,
-            (MSG_PAYLOAD_LEN >> 7) & 127, MSG_PAYLOAD_LEN & 127, program,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            MANUFACTURER_ID,
+            MSG_DIRECTION_OUT,
+            PRODUCT_ID,
+            CMD_WRITE_DATA,
+            (MSG_PAYLOAD_LEN >> 7) & 127,
+            MSG_PAYLOAD_LEN & 127,
+            program,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
             channels.get("pads", DEFAULT_PADS_CH),
             aftertouch,
             channels.get("keybed", DEFAULT_KEYBED_CH),
@@ -204,12 +257,16 @@ class SysExSetProgram:
             CLK_EXTERNAL if arp.get("ext_clock", False) else CLK_INTERNAL,
             ARP_LATCH_ON if arp.get("latch", False) else ARP_LATCH_OFF,
             arp_swing,
-            tempo_taps, (tempo >> 7) & 127, tempo & 127,
+            tempo_taps,
+            (tempo >> 7) & 127,
+            tempo & 127,
             arp.get("octave", ARP_OCTAVE_MIN),
-            joy.get("x-mode", JOY_MODE_PITCHBEND), joy.get("x-neg-ch",
-                                                           1), joy.get("x-pos-ch", 2),
-            joy.get("y-mode", JOY_MODE_DUAL), joy.get("y-neg-ch",
-                                                      1), joy.get("y-pos-ch", 2),
+            joy.get("x-mode", JOY_MODE_PITCHBEND),
+            joy.get("x-neg-ch", 1),
+            joy.get("x-pos-ch", 2),
+            joy.get("y-mode", JOY_MODE_DUAL),
+            joy.get("y-neg-ch", 1),
+            joy.get("y-pos-ch", 2),
         ]
 
         for pidx in range(16):
@@ -223,19 +280,18 @@ class SysExSetProgram:
             self.data.append(knobs["min"][kidx])
             self.data.append(knobs["max"][kidx])
             padname = list(bytes(16))
-            padname[:len(knobs["name"][kidx])] = [ord(c)
-                                                  for c in knobs["name"][kidx]]
+            padname[: len(knobs["name"][kidx])] = [ord(c) for c in knobs["name"][kidx]]
             self.data += padname
 
         self.data.append(transpose)
 
         padname = list(bytes(16))
-        padname[:len(name)] = [ord(c) for c in name]
-        self.data[OFF_PGM_NAME:OFF_PGM_NAME +
-                  NAME_STR_LEN] = padname[:NAME_STR_LEN]
+        padname[: len(name)] = [ord(c) for c in name]
+        self.data[OFF_PGM_NAME : OFF_PGM_NAME + NAME_STR_LEN] = padname[:NAME_STR_LEN]
 
-        assert len(self.data) == DATA_MSG_LEN, \
+        assert len(self.data) == DATA_MSG_LEN, (
             f"ERROR, invalid message size!! ({len(self.data)} != {DATA_MSG_LEN})"
+        )
 
     @classmethod
     def get_user_fields_from_sysex(self, msg):
@@ -253,7 +309,7 @@ class SysExSetProgram:
                 swing=msg[OFF_ARP_SWING],
                 octave=msg[OFF_ARP_OCTAVE],
                 ext_clock=msg[OFF_ARP_CLK_EXT] == 1,
-            )
+            ),
         )
 
     def __repr__(self):
@@ -321,8 +377,9 @@ class SavedState:
 # --------------------------------------------------------------------------
 # 'Akai MPK mini mk3' device controller class
 # --------------------------------------------------------------------------
-class zynthian_ctrldev_akai_mpk_mini_mk3(zynthian_ctrldev_zynmixer):
-
+class zynthian_ctrldev_akai_mpk_mini_mk3(
+    zynthian_ctrldev_zynpad, zynthian_ctrldev_zynmixer
+):
     dev_ids = ["MPK mini 3 IN 1"]
     driver_description = "Full UI integration"
     unroute_from_chains = False
@@ -330,30 +387,27 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(zynthian_ctrldev_zynmixer):
 
     def __init__(self, state_manager, idev_in, idev_out):
         self._saved_state = SavedState(state_manager.zynseq)
-        self._mixer_handler = MixerHandler(
-            state_manager, idev_out, self._saved_state)
-        self._device_handler = DeviceHandler(
-            state_manager, idev_out, self._saved_state)
+        self._mixer_handler = MixerHandler(state_manager, idev_out, self._saved_state)
+        self._device_handler = DeviceHandler(state_manager, idev_out, self._saved_state)
         self._pattern_handler = PatternHandler(
-            state_manager, idev_out, self._saved_state)
+            state_manager, idev_out, self._saved_state, self
+        )
         self._notepad_handler = NotePadHandler(
-            state_manager, idev_out, self._saved_state)
-        self._user_handler = UserHandler(
-            state_manager, idev_out, self._saved_state)
-        self._config_handler = ConfigHandler(
-            state_manager, idev_out, self._saved_state)
+            state_manager, idev_out, self._saved_state
+        )
+        self._user_handler = UserHandler(state_manager, idev_out, self._saved_state)
+        self._config_handler = ConfigHandler(state_manager, idev_out, self._saved_state)
         self._current_handler = self._mixer_handler
         self._current_screen = None
         self._saved_mpk_program = None
 
         self._signals = [
-            (zynsigman.S_GUI,
-                zynsigman.SS_GUI_SHOW_SCREEN,
-                self._on_gui_show_screen),
-
+            (zynsigman.S_GUI, zynsigman.SS_GUI_SHOW_SCREEN, self._on_gui_show_screen),
             # FIXME: add a signal for tempo change, and then update device!
         ]
         super().__init__(state_manager, idev_in, idev_out)
+        self.cols = 4
+        self.rows = 4
 
     def init(self):
         super().init()
@@ -396,20 +450,22 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(zynthian_ctrldev_zynmixer):
                 self._change_handler(self._config_handler)
             elif program == PROG_OPEN_MIXER:
                 self.state_manager.send_cuia(
-                    "SCREEN_ALSA_MIXER" if self._current_screen == "mixer" else
-                    "SCREEN_MIXER"
+                    "SCREEN_ALSA_MIXER"
+                    if self._current_screen == "mixer"
+                    else "SCREEN_MIXER"
                 )
             elif program == PROG_OPEN_ZYNPAD:
-                self.state_manager.send_cuia({
-                    "zynpad": "SCREEN_ARRANGER",
-                    "arranger": "SCREEN_PATTERN_EDITOR"
-                }.get(self._current_screen, "SCREEN_ZYNPAD"))
+                self.state_manager.send_cuia(
+                    {
+                        "zynpad": "SCREEN_ARRANGER",
+                        "arranger": "SCREEN_PATTERN_EDITOR",
+                    }.get(self._current_screen, "SCREEN_ZYNPAD")
+                )
             elif program == PROG_OPEN_TEMPO:
                 self.state_manager.send_cuia("TEMPO")
             elif program == PROG_OPEN_SNAPSHOT:
                 self.state_manager.send_cuia(
-                    "SCREEN_SNAPSHOT" if self._current_screen == "zs3" else
-                    "SCREEN_ZS3"
+                    "SCREEN_SNAPSHOT" if self._current_screen == "zs3" else "SCREEN_ZS3"
                 )
             else:
                 self._current_handler.pg_change(program)
@@ -458,7 +514,11 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(zynthian_ctrldev_zynmixer):
 
     def _on_gui_show_screen(self, screen):
         self._current_screen = screen
-        for handler in [self._device_handler, self._mixer_handler, self._pattern_handler]:
+        for handler in [
+            self._device_handler,
+            self._mixer_handler,
+            self._pattern_handler,
+        ]:
             handler.on_screen_change(screen)
 
     def _save_mpk_program(self):
@@ -475,15 +535,13 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(zynthian_ctrldev_zynmixer):
         query[2] = MSG_DIRECTION_OUT
         query[4] = CMD_WRITE_DATA
         query.append(0xF7)
-        lib_zyncore.dev_send_midi_event(
-            self.idev_out, bytes(query), len(query))
+        lib_zyncore.dev_send_midi_event(self.idev_out, bytes(query), len(query))
 
 
 # --------------------------------------------------------------------------
 # Audio mixer and (a sort of) Zynpad handler (Mixer mode)
 # --------------------------------------------------------------------------
 class MixerHandler(ModeHandlerBase):
-
     CC_PAD_START_A = 8
     CC_PAD_VOLUME_A = 8
     CC_PAD_PAN_A = 9
@@ -529,7 +587,6 @@ class MixerHandler(ModeHandlerBase):
     def cc_change(self, ccnum, ccval):
         # Is a PAD press
         if self.CC_PAD_START_A <= ccnum <= self.CC_PAD_END_B:
-
             # This will happend when FULL LEVEL is on (or with a very strong press)
             if ccval == 127:
                 if self._current_screen in ["mixer", "zynpad"]:
@@ -595,26 +652,26 @@ class MixerHandler(ModeHandlerBase):
             keybed_octave=self._saved_state.keybed_octave,
             channels={
                 "pads": self._saved_state.pads_channel,
-                "keybed": self._saved_state.keybed_channel
+                "keybed": self._saved_state.keybed_channel,
             },
             pads={
                 "note": self._saved_state.pad_notes,
                 "pc": range(16),
-                "cc": range(self.CC_PAD_START_A, self.CC_PAD_END_B + 1)
+                "cc": range(self.CC_PAD_START_A, self.CC_PAD_END_B + 1),
             },
             knobs={
                 "mode": [KNOB_MODE_REL] * 8,
                 "cc": range(self.CC_KNOBS_START, self.CC_KNOBS_END + 1),
                 "min": [0] * 8,
                 "max": [127] * 8,
-                "name": [f"Chain {i}/{i+8}" for i in range(1, 9)]
+                "name": [f"Chain {i}/{i + 8}" for i in range(1, 9)],
             },
             joy={
                 "x-mode": JOY_MODE_DUAL,
                 "x-neg-ch": self.CC_JOY_X_NEG,
                 "x-pos-ch": self.CC_JOY_X_POS,
-                "y-mode": JOY_MODE_PITCHBEND
-            }
+                "y-mode": JOY_MODE_PITCHBEND,
+            },
         )
         msg = bytes.fromhex("F0 {} F7".format(cmd))
         lib_zyncore.dev_send_midi_event(self._idev_out, msg, len(msg))
@@ -651,10 +708,14 @@ class MixerHandler(ModeHandlerBase):
             set_value = self._zynmixer.set_balance
         elif type == "mute":
             value = ccval < 64
-            def set_value(c, v): return self._zynmixer.set_mute(c, v, True)
+
+            def set_value(c, v):
+                return self._zynmixer.set_mute(c, v, True)
         elif type == "solo":
             value = ccval < 64
-            def set_value(c, v): return chain.set_solo(v)
+
+            def set_value(c, v):
+                return chain.set_solo(v)
         elif type == "select":
             return self._chain_manager.set_active_chain_by_id(chain.chain_id)
         else:
@@ -675,7 +736,6 @@ class MixerHandler(ModeHandlerBase):
 # Handle GUI (Device mode)
 # --------------------------------------------------------------------------
 class DeviceHandler(ModeHandlerBase):
-
     CC_PAD_START = 8
     CC_PAD_LEFT = 8
     CC_PAD_DOWN = 9
@@ -735,17 +795,23 @@ class DeviceHandler(ModeHandlerBase):
             self.PC_PAD_KNOB4_BTN: 3,  # Select
         }.get(program)
         if zynswitch is not None:
-            self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [zynswitch, 'S'])
+            self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [zynswitch, "S"])
 
     def cc_change(self, ccnum, ccval):
         if self.CC_PAD_START <= ccnum <= self.CC_PAD_END:
-
             # PADs that support short/bold/long push
-            if ccnum in (self.CC_PAD_CTRL_PRESET, self.CC_PAD_OPT_ADMIN, self.CC_PAD_SEL_YES,
-                         self.CC_PAD_KNOB1_BTN, self.CC_PAD_KNOB2_BTN, self.CC_PAD_KNOB3_BTN,
-                         self.CC_PAD_KNOB4_BTN):
-                self._btn_timer.is_released(ccnum) if ccval == 0 else \
-                    self._btn_timer.is_pressed(ccnum, time.time())
+            if ccnum in (
+                self.CC_PAD_CTRL_PRESET,
+                self.CC_PAD_OPT_ADMIN,
+                self.CC_PAD_SEL_YES,
+                self.CC_PAD_KNOB1_BTN,
+                self.CC_PAD_KNOB2_BTN,
+                self.CC_PAD_KNOB3_BTN,
+                self.CC_PAD_KNOB4_BTN,
+            ):
+                self._btn_timer.is_released(
+                    ccnum
+                ) if ccval == 0 else self._btn_timer.is_pressed(ccnum, time.time())
 
             if ccval == 0:  # Release
                 return
@@ -783,7 +849,8 @@ class DeviceHandler(ModeHandlerBase):
             else:
                 if key not in self._joystick_timer:
                     self._joystick_timer.add(
-                        key, ts, lambda _: self._state_manager.send_cuia(cuia))
+                        key, ts, lambda _: self._state_manager.send_cuia(cuia)
+                    )
                 else:
                     self._joystick_timer.update(key, ts)
 
@@ -791,12 +858,14 @@ class DeviceHandler(ModeHandlerBase):
             delta = self._knobs_ease.feed(ccnum, ccval)
             if delta is None:
                 return
-            self._show_screen_briefly(
-                screen="tempo", cuia="TEMPO", timeout=1500)
+            self._show_screen_briefly(screen="tempo", cuia="TEMPO", timeout=1500)
             tempo = self._zynseq.get_tempo() + delta * 0.1
             self._zynseq.set_tempo(tempo)
-            self._timer.add("update-device-tempo", 1500, lambda _:
-                            self._upload_mode_layout_to_device())
+            self._timer.add(
+                "update-device-tempo",
+                1500,
+                lambda _: self._upload_mode_layout_to_device(),
+            )
 
         else:
             delta = self._knobs_ease.feed(ccnum, ccval)
@@ -807,7 +876,7 @@ class DeviceHandler(ModeHandlerBase):
                 self.CC_KNOB_LAYER: 0,
                 self.CC_KNOB_BACK: 1,
                 self.CC_KNOB_SNAPSHOT: 2,
-                self.CC_KNOB_SELECT: 3
+                self.CC_KNOB_SELECT: 3,
             }.get(ccnum, None)
             if zynpot is None:
                 return
@@ -822,31 +891,34 @@ class DeviceHandler(ModeHandlerBase):
             self.CC_PAD_KNOB4_BTN: 3,  # Select
         }.get(btn)
         if zynswitch is not None:
-            state = 'B' if press_type == CONST.PT_BOLD else 'S'
-            self._state_manager.send_cuia(
-                "V5_ZYNPOT_SWITCH", [zynswitch, state])
+            state = "B" if press_type == CONST.PT_BOLD else "S"
+            self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [zynswitch, state])
             return
 
         cuia = None
         if press_type == CONST.PT_SHORT:
             if btn == self.CC_PAD_CTRL_PRESET:
-                cuia = ("PRESET" if self._current_screen == "control"
-                        else "SCREEN_BANK" if self._current_screen == "preset"
-                        else "SCREEN_CONTROL")
+                cuia = (
+                    "PRESET"
+                    if self._current_screen == "control"
+                    else "SCREEN_BANK"
+                    if self._current_screen == "preset"
+                    else "SCREEN_CONTROL"
+                )
             elif btn == self.CC_PAD_OPT_ADMIN:
                 cuia = "SCREEN_ADMIN" if self._current_screen == "main_menu" else "MENU"
             elif btn == self.CC_PAD_SEL_YES:
-                self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [3, 'S'])
+                self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [3, "S"])
 
         elif press_type == CONST.PT_BOLD:
             if btn == self.CC_PAD_CTRL_PRESET:
                 cuia = "SCREEN_PATTERN_EDITOR"
             elif btn == self.CC_PAD_SEL_YES:
-                self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [3, 'B'])
+                self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [3, "B"])
 
         elif press_type == CONST.PT_LONG:
             cuia = {
-                self.CC_PAD_OPT_ADMIN:   "POWER_OFF",
+                self.CC_PAD_OPT_ADMIN: "POWER_OFF",
                 self.CC_PAD_CTRL_PRESET: "PRESET_FAV",
             }.get(btn)
 
@@ -863,23 +935,35 @@ class DeviceHandler(ModeHandlerBase):
             keybed_octave=self._saved_state.keybed_octave,
             channels={
                 "pads": self._saved_state.pads_channel,
-                "keybed": self._saved_state.keybed_channel
+                "keybed": self._saved_state.keybed_channel,
             },
             pads={
                 "note": self._saved_state.pad_notes,
                 "pc": range(16),
-                "cc": range(self.CC_PAD_START, self.CC_PAD_END + 1)
+                "cc": range(self.CC_PAD_START, self.CC_PAD_END + 1),
             },
             knobs={
-                "mode": [KNOB_MODE_REL] * 3 + [KNOB_MODE_ABS, KNOB_MODE_REL,
-                                               KNOB_MODE_REL, KNOB_MODE_ABS, KNOB_MODE_ABS],
+                "mode": [KNOB_MODE_REL] * 3
+                + [
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_REL,
+                    KNOB_MODE_REL,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
+                ],
                 "cc": range(self.CC_KNOB_START, self.CC_KNOB_END + 1),
                 "min": [0] * 8,
                 "max": [127] * 8,
                 "name": [
-                    "Knob#1", "Knob#3", "Tempo", "K4",
-                    "Knob#2", "Knob#4", "K7", "K8"
-                ]
+                    "Knob#1",
+                    "Knob#3",
+                    "Tempo",
+                    "K4",
+                    "Knob#2",
+                    "Knob#4",
+                    "K7",
+                    "K8",
+                ],
             },
             joy={
                 "x-mode": JOY_MODE_DUAL,
@@ -887,8 +971,8 @@ class DeviceHandler(ModeHandlerBase):
                 "x-pos-ch": self.CC_JOY_X_POS,
                 "y-mode": JOY_MODE_DUAL,
                 "y-neg-ch": self.CC_JOY_Y_NEG,
-                "y-pos-ch": self.CC_JOY_Y_POS
-            }
+                "y-pos-ch": self.CC_JOY_Y_POS,
+            },
         )
         msg = bytes.fromhex("F0 {} F7".format(cmd))
         lib_zyncore.dev_send_midi_event(self._idev_out, msg, len(msg))
@@ -898,7 +982,6 @@ class DeviceHandler(ModeHandlerBase):
 # Handle pattern editor (Pattern mode)
 # --------------------------------------------------------------------------
 class PatternHandler(ModeHandlerBase):
-
     CC_KNOB_START = 24
     CC_KNOB_MOVE_V = 25  # K2
     CC_KNOB_STUTTER_COUNT = 26  # K3
@@ -909,11 +992,11 @@ class PatternHandler(ModeHandlerBase):
     CC_KNOB_END = 31
 
     CC_PAD_START = 8
-    CC_PAD_PREV_PATTERN_A = 9   # PAD 1 A
+    CC_PAD_PREV_PATTERN_A = 9  # PAD 1 A
     CC_PAD_NEXT_PATTERN_A = 13  # PAD 2 A
     CC_PAD_SHIFT_A = 17  # PAD 3 A
     CC_PAD_ACTION_A = 21  # PAD 4 A
-    CC_PAD_PANIC_STOP_A = 8   # PAD 5 A
+    CC_PAD_PANIC_STOP_A = 8  # PAD 5 A
     CC_PAD_RECORD_A = 12  # PAD 6 A
     CC_PAD_STOP_A = 16  # PAD 7 A
     CC_PAD_PLAY_A = 20  # PAD 8 A
@@ -932,11 +1015,12 @@ class PatternHandler(ModeHandlerBase):
     CC_JOY_Y_NEG = 34
     CC_JOY_Y_POS = 35
 
-    def __init__(self, state_manager, idev_out, saved_state: SavedState):
+    def __init__(self, state_manager, idev_out, saved_state: SavedState, driver):
         super().__init__(state_manager)
         self._libseq = self._zynseq.libseq
         self._idev_out = idev_out
         self._saved_state = saved_state
+        self._driver = driver
         self._knobs_ease = KnobSpeedControl(steps_normal=5)
         self._joystick_timer = None
 
@@ -949,14 +1033,17 @@ class PatternHandler(ModeHandlerBase):
         if self._current_screen not in ("zynpad", "arranger", "pattern_editor"):
             return
 
-        # If 'FULL-LEVEL' is active (ccval=127), then use PADs to launch sequences
+        # Use PADs to launch/stop clips
         if self.CC_PAD_START <= ccnum <= self.CC_PAD_END:
-            if ccval == 127 and self._current_screen == "zynpad":
+            if ccval > 0:
                 pad = ccnum - self.CC_PAD_START
-                info = self._zynseq.get_launcher_info(pad // 4, pad % 4)
-                if info is not None:
-                    self._libseq.togglePlayState(self._zynseq.scene, info['phrase'], info["sequence"])
-                return
+                col = pad % 4
+                row = pad // 4
+                midi_chan = self._driver.get_filtered_midi_chan_by_index(col)
+                if midi_chan is not None:
+                    phrase = row + self._driver.scroll_v
+                    self._libseq.togglePlayState(self._zynseq.scene, phrase, midi_chan)
+            return
 
         if ccnum in (self.CC_PAD_SHIFT_A, self.CC_PAD_SHIFT_B):
             self.on_shift_changed(ccval > 0)
@@ -975,7 +1062,7 @@ class PatternHandler(ModeHandlerBase):
                 self._state_manager.send_cuia(f"ARROW_{dir}")
         elif ccnum in (self.CC_PAD_ACTION_A, self.CC_PAD_ACTION_B):
             if ccval > 0:
-                self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [3, 'S'])
+                self._state_manager.send_cuia("V5_ZYNPOT_SWITCH", [3, "S"])
 
         elif self.CC_JOY_X_NEG <= ccnum <= self.CC_JOY_Y_POS:
             if self._joystick_timer is None:
@@ -992,7 +1079,8 @@ class PatternHandler(ModeHandlerBase):
             else:
                 if key not in self._joystick_timer:
                     self._joystick_timer.add(
-                        key, ts, lambda _: self._state_manager.send_cuia(cuia))
+                        key, ts, lambda _: self._state_manager.send_cuia(cuia)
+                    )
                 else:
                     self._joystick_timer.update(key, ts)
 
@@ -1033,8 +1121,7 @@ class PatternHandler(ModeHandlerBase):
                 if not self._is_shifted:
                     return
                 pattern = self._libseq.createPattern()
-                self._add_pattern_to_end_of_track(
-                    self._zynseq.bank, seq, 0, pattern)
+                self._add_pattern_to_end_of_track(self._zynseq.bank, seq, 0, pattern)
                 patterns.append(pattern)
             self._libseq.selectPattern(patterns[pos + 1])
             self._refresh_pattern_editor()
@@ -1079,8 +1166,8 @@ class PatternHandler(ModeHandlerBase):
             aftertouch=self._saved_state.aftertouch,
             keybed_octave=self._saved_state.keybed_octave,
             channels={
-                "pads":  self._saved_state.pads_channel,
-                "keybed": self._saved_state.keybed_channel
+                "pads": self._saved_state.pads_channel,
+                "keybed": self._saved_state.keybed_channel,
             },
             pads={
                 "note": self._saved_state.pad_notes,
@@ -1088,19 +1175,31 @@ class PatternHandler(ModeHandlerBase):
                 # "cc": range(self.CC_PAD_START, self.CC_PAD_END + 1),
                 # "cc": [1, 5, 9, 13, 0, 4, 8, 12, 3, 7, 11, 15, 2, 6, 10, 14],
                 # This order is the same as pads in Zynpad
-                "cc": [9, 13, 17, 21, 8, 12, 16, 20, 11, 15, 19, 23, 10, 14, 18, 22]
+                "cc": [9, 13, 17, 21, 8, 12, 16, 20, 11, 15, 19, 23, 10, 14, 18, 22],
             },
             knobs={
                 "mode": [
-                    KNOB_MODE_ABS, KNOB_MODE_REL, KNOB_MODE_ABS, KNOB_MODE_ABS,
-                    KNOB_MODE_ABS, KNOB_MODE_REL, KNOB_MODE_REL, KNOB_MODE_ABS
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_REL,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_REL,
+                    KNOB_MODE_REL,
+                    KNOB_MODE_ABS,
                 ],
                 "cc": range(self.CC_KNOB_START, self.CC_KNOB_END + 1),
                 "min": [0, 0, 0, 1, 0, 0, 0, 0],
                 "max": [1, 1, 32, 96, 1, 1, 1, 127],
                 "name": [
-                    "K1", "Cursor V", "Stutter Count", "Stutter Duration",
-                    "k5", "Cursor H", "Duration", "Velocity"
+                    "K1",
+                    "Cursor V",
+                    "Stutter Count",
+                    "Stutter Duration",
+                    "k5",
+                    "Cursor H",
+                    "Duration",
+                    "Velocity",
                 ],
             },
             joy={
@@ -1109,8 +1208,8 @@ class PatternHandler(ModeHandlerBase):
                 "x-pos-ch": self.CC_JOY_X_POS,
                 "y-mode": JOY_MODE_DUAL,
                 "y-neg-ch": self.CC_JOY_Y_NEG,
-                "y-pos-ch": self.CC_JOY_Y_POS
-            }
+                "y-pos-ch": self.CC_JOY_Y_POS,
+            },
         )
         msg = bytes.fromhex("F0 {} F7".format(cmd))
         lib_zyncore.dev_send_midi_event(self._idev_out, msg, len(msg))
@@ -1120,7 +1219,6 @@ class PatternHandler(ModeHandlerBase):
 # Handle an editor of note pads (NotePad mode)
 # --------------------------------------------------------------------------
 class NotePadHandler(ModeHandlerBase):
-
     CC_PAD_START = 8
     CC_PAD_END = 23
 
@@ -1193,8 +1291,9 @@ class NotePadHandler(ModeHandlerBase):
                 should_upload = True
 
         if len(self._pressed_pads) == 0:
-            should_upload |= len(self._notes_to_add) > 0 or len(
-                self._notes_to_remove) > 0
+            should_upload |= (
+                len(self._notes_to_add) > 0 or len(self._notes_to_remove) > 0
+            )
             while self._notes_to_add:
                 pad, note = self._notes_to_add.popitem()
                 self._saved_state.pad_notes[pad] = note
@@ -1208,8 +1307,7 @@ class NotePadHandler(ModeHandlerBase):
 
     def cc_change(self, ccnum, ccval):
         if ccnum == self.CC_KNOB_ADJUST_NOTE and len(self._pressed_pads) == 1:
-            self._adjust_note_pad(ccnum, ccval, list(
-                self._pressed_pads.keys())[0])
+            self._adjust_note_pad(ccnum, ccval, list(self._pressed_pads.keys())[0])
         elif ccnum == self.CC_KNOB_REMOVE_NOTE:
             self._toggle_mark_to_remove(ccval)
 
@@ -1248,7 +1346,8 @@ class NotePadHandler(ModeHandlerBase):
                     continue
                 self._notes_to_remove.add(pad)
                 self._libseq.sendMidiCommand(
-                    note_off, self._saved_state.pad_notes[pad], 0)
+                    note_off, self._saved_state.pad_notes[pad], 0
+                )
 
         # CW rotation, undo not-commited changes
         elif ccval == 1:
@@ -1256,7 +1355,8 @@ class NotePadHandler(ModeHandlerBase):
                 if pad in self._notes_to_remove:
                     self._notes_to_remove.discard(pad)
                     self._libseq.sendMidiCommand(
-                        note_on, self._saved_state.pad_notes[pad], 64)
+                        note_on, self._saved_state.pad_notes[pad], 64
+                    )
 
     def _upload_mode_layout_to_device(self):
         cmd = SysExSetProgram(
@@ -1268,19 +1368,19 @@ class NotePadHandler(ModeHandlerBase):
             keybed_octave=self._saved_state.keybed_octave,
             channels={
                 "pads": self._saved_state.pads_channel,
-                "keybed": self._saved_state.keybed_channel
+                "keybed": self._saved_state.keybed_channel,
             },
             pads={
                 "note": self._saved_state.pad_notes,
                 "pc": range(16),
-                "cc": range(self.CC_PAD_START, self.CC_PAD_END + 1)
+                "cc": range(self.CC_PAD_START, self.CC_PAD_END + 1),
             },
             knobs={
                 "mode": [KNOB_MODE_ABS] + [KNOB_MODE_REL] * 7,
                 "cc": range(self.CC_KNOB_START, self.CC_KNOB_END + 1),
                 "min": [1] + [0] * 7,
                 "max": [16] + [127] * 7,
-                "name": [f"K{i}" for i in range(1, 7)] + ["Adjust Note", "Remove Note"]
+                "name": [f"K{i}" for i in range(1, 7)] + ["Adjust Note", "Remove Note"],
             },
             joy={
                 "x-mode": JOY_MODE_DUAL,
@@ -1289,7 +1389,7 @@ class NotePadHandler(ModeHandlerBase):
                 "y-mode": JOY_MODE_DUAL,
                 "y-neg-ch": self.CC_JOY_Y_NEG,
                 "y-pos-ch": self.CC_JOY_Y_POS,
-            }
+            },
         )
         msg = bytes.fromhex("F0 {} F7".format(cmd))
         lib_zyncore.dev_send_midi_event(self._idev_out, msg, len(msg))
@@ -1299,7 +1399,6 @@ class NotePadHandler(ModeHandlerBase):
 # Empty handler to allow the use of PADs/KNOBs for MIDI learn (User mode)
 # --------------------------------------------------------------------------
 class UserHandler(ModeHandlerBase):
-
     CC_JOY_X_NEG = 64
     CC_JOY_X_POS = 65
 
@@ -1323,27 +1422,27 @@ class UserHandler(ModeHandlerBase):
             keybed_octave=self._saved_state.keybed_octave,
             channels={
                 "pads": self._saved_state.pads_channel,
-                "keybed": self._saved_state.keybed_channel
+                "keybed": self._saved_state.keybed_channel,
             },
             pads={
                 "note": self._saved_state.pad_notes,
                 "pc": range(16),
-                "cc": range(40, 56)
+                "cc": range(40, 56),
             },
             knobs={
-                #"mode": [KNOB_MODE_ABS] * 8,
+                # "mode": [KNOB_MODE_ABS] * 8,
                 "mode": [KNOB_MODE_REL] * 8,
                 "cc": range(56, 64),
                 "min": [0] * 8,
                 "max": [127] * 8,
-                "name": [f"K{i}" for i in range(1, 9)]
+                "name": [f"K{i}" for i in range(1, 9)],
             },
             joy={
                 "x-mode": JOY_MODE_DUAL,
                 "x-neg-ch": self.CC_JOY_X_NEG,
                 "x-pos-ch": self.CC_JOY_X_POS,
-                "y-mode": JOY_MODE_PITCHBEND
-            }
+                "y-mode": JOY_MODE_PITCHBEND,
+            },
         )
         msg = bytes.fromhex("F0 {} F7".format(cmd))
         lib_zyncore.dev_send_midi_event(self._idev_out, msg, len(msg))
@@ -1354,7 +1453,6 @@ class UserHandler(ModeHandlerBase):
 # not loose them in evert mode change. (Config mode)
 # --------------------------------------------------------------------------
 class ConfigHandler(ModeHandlerBase):
-
     CC_PAD_START = 8
     CC_PAD_SHIFT = 10
     CC_PAD_ARP_TOGGLE = 11
@@ -1447,12 +1545,12 @@ class ConfigHandler(ModeHandlerBase):
         # SHIFTed functions
         if self.CC_PAD_SHIFT in self._pressed_pads:
             target, convert_value = {
-                self.CC_KNOB_TEMPO_TAPS:     ("tempo_taps", lambda v: v),
-                self.CC_KNOB_SWING:          ("arp.swing", lambda v: 50 - v),
-                self.CC_KNOB_AFTERTOUCH:     ("aftertouch", lambda v: v),
-                self.CC_KNOB_KEYBED_OCTAVE:  ("keybed_octave", lambda v: v),
-                self.CC_KNOB_EXT_CLOCK:      ("arp.ext_clock", lambda v: v),
-                self.CC_KNOB_PAD_CHANNEL:    ("pads_channel", lambda v: v - 1),
+                self.CC_KNOB_TEMPO_TAPS: ("tempo_taps", lambda v: v),
+                self.CC_KNOB_SWING: ("arp.swing", lambda v: 50 - v),
+                self.CC_KNOB_AFTERTOUCH: ("aftertouch", lambda v: v),
+                self.CC_KNOB_KEYBED_OCTAVE: ("keybed_octave", lambda v: v),
+                self.CC_KNOB_EXT_CLOCK: ("arp.ext_clock", lambda v: v),
+                self.CC_KNOB_PAD_CHANNEL: ("pads_channel", lambda v: v - 1),
                 self.CC_KNOB_KEYBED_CHANNEL: ("keybed_channel", lambda v: v - 1),
             }.get(ccnum, (None, None))
             if target is not None:
@@ -1468,32 +1566,56 @@ class ConfigHandler(ModeHandlerBase):
             keybed_octave=self._saved_state.keybed_octave,
             channels={
                 "pads": self._saved_state.pads_channel,
-                "keybed": self._saved_state.keybed_channel
+                "keybed": self._saved_state.keybed_channel,
             },
             pads={
                 "note": self._saved_state.pad_notes,
                 "pc": range(16),
-                "cc": range(self.CC_PAD_START, self.CC_PAD_END + 1)
+                "cc": range(self.CC_PAD_START, self.CC_PAD_END + 1),
             },
             knobs={
                 "cc": range(self.CC_KNOB_START, self.CC_KNOB_END + 1),
                 "mode": [
-                    KNOB_MODE_ABS, KNOB_MODE_ABS, KNOB_MODE_ABS, KNOB_MODE_ABS,
-                    KNOB_MODE_REL, KNOB_MODE_ABS, KNOB_MODE_ABS, KNOB_MODE_ABS
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_REL,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
+                    KNOB_MODE_ABS,
                 ],
                 "min": [
-                    TEMPO_TAPS_MIN, 50 + ARP_SWING_MIN, AFTERTOUCH_OFF, KEY_OCTAVE_MIN,
-                    0, 0, 1, 1
+                    TEMPO_TAPS_MIN,
+                    50 + ARP_SWING_MIN,
+                    AFTERTOUCH_OFF,
+                    KEY_OCTAVE_MIN,
+                    0,
+                    0,
+                    1,
+                    1,
                 ],
                 "max": [
-                    TEMPO_TAPS_MAX, 50 + ARP_SWING_MAX, AFTERTOUCH_POLYPHONIC, KEY_OCTAVE_MAX,
-                    1, 1, 16, 16
+                    TEMPO_TAPS_MAX,
+                    50 + ARP_SWING_MAX,
+                    AFTERTOUCH_POLYPHONIC,
+                    KEY_OCTAVE_MAX,
+                    1,
+                    1,
+                    16,
+                    16,
                 ],
                 "name": [
-                    "Tempo Taps", "Swing", "Aftertouch", "KeyBed Octave",
-                    "K5", "Ext Clock", "PADs Channel", "KeyBed Channel"
-                ]
-            }
+                    "Tempo Taps",
+                    "Swing",
+                    "Aftertouch",
+                    "KeyBed Octave",
+                    "K5",
+                    "Ext Clock",
+                    "PADs Channel",
+                    "KeyBed Channel",
+                ],
+            },
         )
         msg = bytes.fromhex("F0 {} F7".format(cmd))
         lib_zyncore.dev_send_midi_event(self._idev_out, msg, len(msg))
