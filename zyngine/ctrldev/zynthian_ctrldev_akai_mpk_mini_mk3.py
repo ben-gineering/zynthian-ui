@@ -507,8 +507,6 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(
 
             self._current_handler.sysex_message(ev[1:-1])
 
-    def refresh(self):
-        pass
 
     def update_mixer_strip(self, chan, symbol, value, mixbus=False):
         pass
