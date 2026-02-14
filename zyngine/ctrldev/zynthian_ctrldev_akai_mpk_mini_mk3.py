@@ -1030,7 +1030,7 @@ class PatternHandler(ModeHandlerBase):
             self._upload_mode_layout_to_device()
 
     def cc_change(self, ccnum, ccval):
-        if self._current_screen not in ("zynpad", "arranger", "pattern_editor"):
+        if self._current_screen not in ("launcher", "arranger", "pattern_editor"):
             return
 
         # Use PADs to launch/stop clips
