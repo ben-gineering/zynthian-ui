@@ -411,6 +411,7 @@ class zynthian_ctrldev_akai_mpk_mini_mk3(
 
     def init(self):
         super().init()
+        self.refresh()
         for signal, subsignal, callback in self._signals:
             zynsigman.register(signal, subsignal, callback)
         self._save_mpk_program()
