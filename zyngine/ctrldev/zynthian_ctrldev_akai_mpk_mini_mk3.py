@@ -1052,17 +1052,11 @@ class PatternHandler(ModeHandlerBase):
                 pad = ccnum - self.CC_PAD_START
                 col = pad % 4
                 row = pad // 4
-                logging.error(f"PATTERN: pad={pad} col={col} row={row}")
-                
-                midi_chan = self._driver.get_filtered_midi_chan_by_index(col)
-                logging.error(f"PATTERN: midi_chan={midi_chan} (from get_filtered_midi_chan_by_index({col}))")
-                
+
+                midi_chan = self._driver.get_filtered_midi_chan_by_index(row)
                 if midi_chan is not None:
-                    phrase = row + self._driver.scroll_v
-                    logging.error(f"PATTERN: TOGGLING scene={self._zynseq.scene} phrase={phrase} chan={midi_chan}")
+                    phrase = col + self._driver.scroll_v
                     self._libseq.togglePlayState(self._zynseq.scene, phrase, midi_chan)
-                else:
-                    logging.error(f"PATTERN: SKIPPED - midi_chan is None. Filtered chains: {self._driver.chain_ids_filtered}")
             else:
                 logging.error(f"PATTERN: SKIPPED - ccval={ccval} is not > 0")
             return
