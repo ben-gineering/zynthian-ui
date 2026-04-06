@@ -40,12 +40,21 @@ from zyngui import zynthian_gui_config
 class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
 
     dev_ids = ["PACER IN 1"]
-    driver_description = "Clip launcher (2-switch initial test)"
+    driver_name = "Nektar Pacer"
+    driver_description = "Clip launcher (factory preset A5: FS1=note 52, FS2=note 54)"
+
+    # Note numbers from factory preset A5 (E minor scale notes)
+    # FS1=52(E3), FS2=54(F#3), FS3=55(G3), FS4=57(A3), FS5=59(B3), FS6=60(C4)
+    # Currently testing with FS1 and FS2 only
+    _note_to_col = {52: 0, 54: 1}
 
     def init(self):
         self.cols = 2
         self.rows = 1
         super().init()
+
+    def _col_to_note(self, col):
+        return 52 + (col * 2)
 
     def update_pad(self, row, col, pad_info):
         midi_chan = 0
@@ -65,7 +74,7 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
             pass
 
         if col < self.cols:
-            note = 36 + col
+            note = self._col_to_note(col)
             lib_zyncore.dev_send_note_on(self.idev_out, midi_chan, note, velocity)
 
     def midi_event(self, ev):
@@ -74,8 +83,8 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
             note = ev[1] & 0x7F
             vel = ev[2] & 0x7F
             if vel > 0:
-                col = note - 36
-                if 0 <= col < self.cols:
+                col = self._note_to_col.get(note)
+                if col is not None and col < self.cols:
                     row = 0
                     phrase = row + self.scroll_v
                     midi_chan = self.get_filtered_midi_chan_by_index(col)
@@ -91,7 +100,7 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
 
     def light_off(self):
         for col in range(self.cols):
-            note = 36 + col
+            note = self._col_to_note(col)
             lib_zyncore.dev_send_note_on(self.idev_out, 0, note, 0)
 
     def sleep_on(self):
