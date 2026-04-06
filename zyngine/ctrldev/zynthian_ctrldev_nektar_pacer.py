@@ -39,7 +39,7 @@ from zyngui import zynthian_gui_config
 
 class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
 
-    dev_ids = ["PACER MIDI1"]
+    dev_ids = ["PACER IN 1"]
     driver_description = "Clip launcher (2-switch initial test)"
 
     def init(self):
