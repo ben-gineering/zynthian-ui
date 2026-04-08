@@ -51,6 +51,7 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
     def init(self):
         self.cols = 2
         self.rows = 1
+        self._recording = {}
         super().init()
 
     def _col_to_note(self, col):
@@ -90,6 +91,8 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
                     midi_chan = self.get_filtered_midi_chan_by_index(col)
                     if midi_chan is not None:
                         try:
+                            if self._toggle_clip_record(phrase, midi_chan, col):
+                                return True
                             self.zynseq.libseq.togglePlayState(self.zynseq.scene, phrase, midi_chan)
                         except:
                             pass
@@ -97,6 +100,35 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
         elif ev[0] == 0xF0:
             logging.info(f"Pacer received SysEx => {ev.hex(' ')}")
             return True
+
+    def _toggle_clip_record(self, phrase, midi_chan, col):
+        pated = zynthian_gui_config.zyngui.screens.get("pattern_editor")
+        if pated is None:
+            return False
+
+        pattern = self.zynseq.libseq.getPattern(self.zynseq.scene, phrase, midi_chan, 0, 0)
+        if pattern < 0:
+            return False
+
+        is_recording = self._recording.get(col, False)
+        if is_recording:
+            pated.toggle_midi_record(False)
+            self._recording[col] = False
+            return True
+
+        if not self.zynseq.libseq.isEmpty(self.zynseq.scene, phrase, midi_chan):
+            return False
+
+        pated.phrase = phrase
+        pated.sequence = midi_chan
+        pated.channel = midi_chan
+        pated.load_pattern(pattern)
+        if not self.zynseq.libseq.selectSequence(self.zynseq.scene, phrase, midi_chan):
+            return False
+        pated.toggle_midi_record(True)
+        self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, midi_chan, zynseq.SEQ_STARTING)
+        self._recording[col] = True
+        return True
 
     def light_off(self):
         for col in range(self.cols):
