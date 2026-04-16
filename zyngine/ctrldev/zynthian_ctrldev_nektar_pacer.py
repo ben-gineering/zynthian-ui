@@ -84,6 +84,10 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
                         self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, chan, zynseq.SEQ_STOPPED)
                 except:
                     pass
+            try:
+                self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL, zynseq.SEQ_CHILD_STOPPING)
+            except:
+                pass
 
     def light_off(self):
         pass
