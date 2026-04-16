@@ -173,10 +173,9 @@ class zynthian_gui_controller(tkinter.Canvas):
 
             self.midi_bind = self.create_text(
                 0, 0,
-                width=int(4*0.9*zynthian_gui_config.font_size),
                 anchor=tkinter.S,
                 justify=tkinter.CENTER,
-                font=(zynthian_gui_config.font_family, int(0.7*zynthian_gui_config.font_size)),
+                font=(zynthian_gui_config.font_family, int(0.6 * zynthian_gui_config.font_size)),
                 tags='gui')
 
             # Bind canvas events
@@ -271,7 +270,8 @@ class zynthian_gui_controller(tkinter.Canvas):
             self.coords(self.graph_pickup, x1 + arc_width, y1 + arc_width, x2 - arc_width, y2 - arc_width)
             self.itemconfigure(self.graph_pickup, width=arc_width)
 
-        self.itemconfigure(self.midi_bind, font=(zynthian_gui_config.font_family, round(hh * zynthian_gui_config.font_size / 160)))
+
+        self.itemconfigure(self.midi_bind, font=(zynthian_gui_config.font_family, self.value_width // 7))
         self.coords(self.midi_bind, x0, hh - 2)
 
     # Handle resize of rectangle graph
@@ -297,7 +297,7 @@ class zynthian_gui_controller(tkinter.Canvas):
             self.coords(self.graph, (x1, y1, x2, y2))
             self.coords(self.graph_pickup, (x1, y1, x2, y2))
 
-        self.itemconfigure(self.midi_bind, font=(zynthian_gui_config.font_family, round(hh * zynthian_gui_config.font_size / 160)))
+        self.itemconfigure(self.midi_bind, font=(zynthian_gui_config.font_family, self.value_width // 7))
         self.coords(self.midi_bind, ww // 2, hh - 2)
 
     # Handle resize of triangle graph
@@ -327,7 +327,7 @@ class zynthian_gui_controller(tkinter.Canvas):
             self.coords(self.graph, (x1, y1, x2, y1, x2, y2))
             self.coords(self.graph_pickup, (x1, y1, x2, y1, x2, y2))
 
-        self.itemconfigure(self.midi_bind, font=(zynthian_gui_config.font_family, round(hh * zynthian_gui_config.font_size / 160)))
+        self.itemconfigure(self.midi_bind, font=(zynthian_gui_config.font_family, self.value_width // 7))
         self.coords(self.midi_bind, ww // 2, hh - 2)
 
     def show(self):
@@ -579,6 +579,11 @@ class zynthian_gui_controller(tkinter.Canvas):
     def set_text(self, obj_id, title, max_width, max_height, camel=True):
         if max_width < 10:
             return
+
+        title = str(title).strip().replace("_", " ")
+        if camel:
+            title = camel_split_re.sub(' ', title)
+
         fskey = f"{max_width}x{max_height}x{camel}"
         fs = get_cached_font_size(title, fskey)
         if fs:
@@ -586,9 +591,6 @@ class zynthian_gui_controller(tkinter.Canvas):
             self.itemconfigure(obj_id, text=title, font=font)
             return
 
-        title = str(title).strip()
-        if camel:
-            title = camel_split_re.sub(' ', title)
 
         fs = int(1.0 * zynthian_gui_config.font_size)
         font = tkFont.Font(family=zynthian_gui_config.font_family, size=fs)
@@ -648,7 +650,9 @@ class zynthian_gui_controller(tkinter.Canvas):
 
         # Split long labels and take longest word
         if self.zctrl.labels and len(val_text) > 10:
-            val_text = max(val_text.split(), key=len)
+            words = textwrap.wrap(val_text, 10, break_long_words=False)
+            if len(words) > 1:
+                val_text = max(words, key=len) + "..."
 
         max_fs = int(1.15 * zynthian_gui_config.font_size)
         # Optimization: Start from an estimated size and decide if increase or reduce size

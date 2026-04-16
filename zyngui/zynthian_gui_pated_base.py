@@ -80,6 +80,8 @@ class zynthian_gui_pated_base(zynthian_gui_base):
     DEFAULT_VIEW_STEPS = 16
     DEFAULT_VIEW_ROWS = 16
 
+    clipboard = 8 * [None]      # Pattern clipboard: Array of pattern indexes to copy/paste, shared by all pated instances.
+
     # Function to initialise class
     def __init__(self):
         super().__init__()
@@ -97,7 +99,6 @@ class zynthian_gui_pated_base(zynthian_gui_base):
         self.title = "Pattern 0"
         self.alt_mode = False
         self.edit_mode = EDIT_MODE_NONE  # Enable encoders to adjust note parameters
-        self.clipboard = 8 * [None]      # Pattern clipboard: Array of pattern indexes to copy/paste.
         self.phrase = 0  # Phrase where pattern is used
         self.pattern = 0  # Pattern to edit
         self.sequence = 0  # Sequence used for pattern editor sequence player
@@ -236,7 +237,7 @@ class zynthian_gui_pated_base(zynthian_gui_base):
 
     # Function to get name of this view
     def get_name(self):
-        return "pattern editor base"
+        return "pated base"
 
     # Function to set up behaviour of encoders
     def setup_zynpots(self):
@@ -281,10 +282,10 @@ class zynthian_gui_pated_base(zynthian_gui_base):
         color_bg = zynthian_gui_config.color_panel_tx
         if mode == EDIT_MODE_SINGLE:
             #self.set_title("Note Parameters", color_fg, color_bg)
-            pass
+            self.set_edit_title()
         elif mode == EDIT_MODE_MULTI:
             #self.set_title("Note Parameters ALL", color_fg, color_bg)
-            pass
+            self.set_edit_title()
         elif self.edit_mode == EDIT_MODE_ZOOM:
             self.set_title("Grid zoom", color_fg, color_bg)
         elif self.edit_mode == EDIT_MODE_HISTORY:
@@ -404,12 +405,11 @@ class zynthian_gui_pated_base(zynthian_gui_base):
             menu_options['_SEQUENCE'] = options
         # Pattern Options
         options = {}
-        # TODO This must be improved!!
-        if zynthian_gui_config.touch_navigation:
-            if self.get_name() == "pattern editor":
-                options['\u2610 CC editor'] = 'CC editor'
+        if zynthian_gui_config.touch_navigation or zynthian_gui_config.layout["name"] == "V4":
+            if self.get_name() == "pated note":
+                options['Edit CC'] = 'Toggle Editor'
             else:
-                options['\u2612 CC editor'] = 'CC editor'
+                options['Edit Notes'] = 'Toggle Editor'
         options[f"Length ({self.get_pattern_length()})"] = 'Length'
         options[f"Steps/Beat ({self.n_steps_beat})"] = 'Steps per beat'
         qn = self.zynseq.libseq.getQuantizeNotes()
@@ -487,7 +487,7 @@ class zynthian_gui_pated_base(zynthian_gui_base):
                                                         'value_default': 1, 'value': self.zoom})
             case 'Tempo':
                 self.zyngui.show_screen('tempo')
-            case 'CC editor':
+            case 'Toggle Editor':
                 self.zyngui.toggle_pated()
             case 'Length':
                 labels = []
@@ -799,14 +799,16 @@ class zynthian_gui_pated_base(zynthian_gui_base):
             self.zynseq.libseq.sendMidiCommand(0xB0 | self.channel, 123, 0)  # All notes off
 
     # Function to copy current pattern to clipboard
-    def copy_pattern(self, i=0):
+    def copy_pattern(self, i=0, src_info=None):
+        if src_info is None or len(src_info) != 3:
+            src_info = [self.phrase, self.sequence, self.pattern]
         try:
-            self.clipboard[i] = (self.phrase, self.sequence, self.pattern)
+            self.clipboard[i] = (src_info[0], src_info[1], src_info[2])
         except:
             logging.error(f"Wrong clipboard index => {i}")
 
     # Function to paste pattern from clipboard
-    def paste_pattern(self, i=0):
+    def paste_pattern(self, i=0, dst_pattern=None):
         try:
             paste = self.clipboard[i]
         except:
@@ -816,27 +818,33 @@ class zynthian_gui_pated_base(zynthian_gui_base):
         if paste is None or paste[2] == self.pattern:
             return
         # Overwriting an empty pattern doesn't need confirmation
-        if self.zynseq.libseq.getLastStep() == -1:
-            self.do_paste_pattern(i)
+        #if self.zynseq.libseq.getLastStep() == -1:
+        if self.zynseq.libseq.isPatternEmpty(dst_pattern):
+            self.do_paste_pattern([i, dst_pattern])
         # Overwriting a busy pattern does need confirmation!
         else:
             name = self.zynseq.get_sequence_name(self.zynseq.scene, paste[0], paste[1])
             self.zyngui.show_confirm(f"Overwrite this pattern with content from {name}?",
-                                     self.do_paste_pattern, i)
+                                     self.do_paste_pattern, [i, dst_pattern])
 
     # Function to actually copy pattern
-    def do_paste_pattern(self, i=0):
+    def do_paste_pattern(self, params):
+        i = params[0]
+        dst_pattern = params[1]
         try:
             paste = self.clipboard[i]
         except:
             logging.error(f"Wrong clipboard index => {i}")
             return
+        if dst_pattern is None:
+            dst_pattern = self.pattern
         # Don't paste from None or over itself
-        if paste is None or paste[2] == self.pattern:
+        if paste is None or paste[2] == dst_pattern:
             return
         # Paste from clipboard to current pattern
-        self.zynseq.libseq.copyPattern(paste[2], self.pattern)
-        self.load_pattern(self.pattern)
+        self.zynseq.libseq.copyPattern(paste[2], dst_pattern)
+        if self.shown:
+            self.load_pattern(dst_pattern)
 
     # Function to export pattern to SMF
     def export_smf(self, fname):
