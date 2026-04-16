@@ -77,12 +77,13 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
     def _stop_visible_phrases(self):
         for row in range(self.rows):
             phrase = row + self.scroll_v
-            try:
-                state = self.zynseq.libseq.getPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL)
-                if state != zynseq.SEQ_STOPPED:
-                    self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL, zynseq.SEQ_STOPPED)
-            except:
-                pass
+            for chan in range(32):
+                try:
+                    state = self.zynseq.libseq.getPlayState(self.zynseq.scene, phrase, chan)
+                    if state != zynseq.SEQ_STOPPED:
+                        self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, chan, zynseq.SEQ_STOPPED)
+                except:
+                    pass
 
     def light_off(self):
         pass
