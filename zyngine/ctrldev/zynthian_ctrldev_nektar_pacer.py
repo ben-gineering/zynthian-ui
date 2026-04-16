@@ -30,7 +30,6 @@ import logging
 from zynlibs.zynseq import zynseq
 from zyncoder.zyncore import lib_zyncore
 from zyngine.ctrldev.zynthian_ctrldev_base import zynthian_ctrldev_zynpad
-from zyngui import zynthian_gui_config
 
 # ------------------------------------------------------------------------------------------------------------------
 # Nektar Pacer
@@ -41,21 +40,14 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
 
     dev_ids = ["PACER IN 1"]
     driver_name = "Nektar Pacer"
-    driver_description = "Clip launcher (factory preset A5: FS1=note 52, FS2=note 54)"
+    driver_description = "Phrase launcher (notes 52, 54, 56 for rows A-C)"
 
-    # Note numbers from factory preset A5 (E minor scale notes)
-    # FS1=52(E3), FS2=54(F#3), FS3=55(G3), FS4=57(A3), FS5=59(B3), FS6=60(C4)
-    # Currently testing with FS1 and FS2 only
-    _note_to_col = {52: 0, 54: 1}
+    _note_to_row = {52: 0, 54: 1, 56: 2}
 
     def init(self):
-        self.cols = 2
-        self.rows = 1
-        self._recording = {}
+        self.cols = 0
+        self.rows = 3
         super().init()
-
-    def _col_to_note(self, col):
-        return 52 + (col * 2)
 
     def update_pad(self, row, col, pad_info):
         midi_chan = 0
@@ -84,51 +76,17 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
             note = ev[1] & 0x7F
             vel = ev[2] & 0x7F
             if vel > 0:
-                col = self._note_to_col.get(note)
-                if col is not None and col < self.cols:
-                    row = 0
+                row = self._note_to_row.get(note)
+                if row is not None and row < self.rows:
                     phrase = row + self.scroll_v
-                    midi_chan = self.get_filtered_midi_chan_by_index(col)
-                    if midi_chan is not None:
-                        try:
-                            if self._toggle_clip_record(phrase, midi_chan, col):
-                                return True
-                            self.zynseq.libseq.togglePlayState(self.zynseq.scene, phrase, midi_chan)
-                        except:
-                            pass
+                    try:
+                        self.zynseq.libseq.togglePlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL)
+                    except:
+                        pass
             return True
         elif ev[0] == 0xF0:
             logging.info(f"Pacer received SysEx => {ev.hex(' ')}")
             return True
-
-    def _toggle_clip_record(self, phrase, midi_chan, col):
-        pated = zynthian_gui_config.zyngui.screens.get("pattern_editor")
-        if pated is None:
-            return False
-
-        pattern = self.zynseq.libseq.getPattern(self.zynseq.scene, phrase, midi_chan, 0, 0)
-        if pattern < 0:
-            return False
-
-        is_recording = self._recording.get(col, False)
-        if is_recording:
-            pated.toggle_midi_record(False)
-            self._recording[col] = False
-            return True
-
-        if not self.zynseq.libseq.isEmpty(self.zynseq.scene, phrase, midi_chan):
-            return False
-
-        pated.phrase = phrase
-        pated.sequence = midi_chan
-        pated.channel = midi_chan
-        pated.load_pattern(pattern)
-        if not self.zynseq.libseq.selectSequence(self.zynseq.scene, phrase, midi_chan):
-            return False
-        pated.toggle_midi_record(True)
-        self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, midi_chan, zynseq.SEQ_STARTING)
-        self._recording[col] = True
-        return True
 
     def light_off(self):
         for col in range(self.cols):
