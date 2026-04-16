@@ -42,6 +42,7 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
     driver_name = "Nektar Pacer"
     driver_description = "Phrase launcher (notes 52, 54, 56 for rows A-C)"
 
+    _stop_note = 50
     _note_to_row = {52: 0, 54: 1, 56: 2}
 
     def init(self):
@@ -58,6 +59,9 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
             note = ev[1] & 0x7F
             vel = ev[2] & 0x7F
             if vel > 0:
+                if note == self._stop_note:
+                    self._stop_visible_phrases()
+                    return True
                 row = self._note_to_row.get(note)
                 if row is not None and row < self.rows:
                     phrase = row + self.scroll_v
@@ -69,6 +73,16 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
         elif ev[0] == 0xF0:
             logging.info(f"Pacer received SysEx => {ev.hex(' ')}")
             return True
+
+    def _stop_visible_phrases(self):
+        for row in range(self.rows):
+            phrase = row + self.scroll_v
+            try:
+                state = self.zynseq.libseq.getPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL)
+                if state != zynseq.SEQ_STOPPED:
+                    self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL, zynseq.SEQ_FORCED_STOP)
+            except:
+                pass
 
     def light_off(self):
         pass
