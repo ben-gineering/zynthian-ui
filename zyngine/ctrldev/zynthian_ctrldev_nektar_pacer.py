@@ -50,25 +50,7 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
         super().init()
 
     def update_pad(self, row, col, pad_info):
-        midi_chan = 0
-        velocity = 0
-        try:
-            state = pad_info["state"]
-            if state == zynseq.SEQ_STOPPED:
-                if not pad_info["empty"]:
-                    velocity = 64
-            elif state in (zynseq.SEQ_PLAYING, zynseq.SEQ_CHILD_PLAYING):
-                velocity = 127
-            elif state in (zynseq.SEQ_STOPPING, zynseq.SEQ_STOPPING_SYNC, zynseq.SEQ_FORCED_STOP, zynseq.SEQ_CHILD_STOPPING):
-                velocity = 96
-            elif state == zynseq.SEQ_STARTING:
-                velocity = 96
-        except:
-            pass
-
-        if col < self.cols:
-            note = self._col_to_note(col)
-            lib_zyncore.dev_send_note_on(self.idev_out, midi_chan, note, velocity)
+        pass
 
     def midi_event(self, ev):
         evtype = (ev[0] >> 4) & 0x0F
@@ -89,9 +71,7 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
             return True
 
     def light_off(self):
-        for col in range(self.cols):
-            note = self._col_to_note(col)
-            lib_zyncore.dev_send_note_on(self.idev_out, 0, note, 0)
+        pass
 
     def sleep_on(self):
         pass
