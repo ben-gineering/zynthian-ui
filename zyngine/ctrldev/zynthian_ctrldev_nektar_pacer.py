@@ -80,7 +80,7 @@ class zynthian_ctrldev_nektar_pacer(zynthian_ctrldev_zynpad):
             try:
                 state = self.zynseq.libseq.getPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL)
                 if state != zynseq.SEQ_STOPPED:
-                    self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL, zynseq.SEQ_FORCED_STOP)
+                    self.zynseq.libseq.setPlayState(self.zynseq.scene, phrase, zynseq.PHRASE_CHANNEL, zynseq.SEQ_STOPPED)
             except:
                 pass
 
