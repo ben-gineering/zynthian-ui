@@ -1,35 +1,8 @@
-body {
-	background: #000000;
-	color: #ffffff;
-	font-size: 150%;
-	margin-bottom: 2em;
-}
-
-h1 {
-	color: #ffffff;
-	font-size: 180%;
-}
-
-ul {
-	margin-left: 0.3em;
-	padding-left: 0px;
-}
-li {
-	margin-left: 0px;
-	padding-left: 0.5em;
-}
-
-img.full {
-	width: 100%;
-}
-
-div.clear {
-	clear: both;
-}
+@import "../style.css";
 
 div.left_container {
 	clear: left;
-	width: 65%;
+	width: 60%;
 }
 
 div.full_container {
@@ -40,14 +13,15 @@ div.full_container {
 div.right_float_container {
 	clear: right;
 	float: right;
-	width: 30%;
+	width: 35%;
 }
 
 div.knobs_action_container {
 	clear: both;
 	float: right;
-	width: 30%;
+	width: 35%;
 }
+
 div.knob_action {
 	margin-bottom: 2px;
 	padding-right: 4px;
@@ -55,6 +29,16 @@ div.knob_action {
 	text-align: right;
 	background: #404040;
 }
+
+div.knob_action div.knob_title {
+	float: left;
+	width: 40%;
+	text-align: left;
+	margin: 0.2em;
+	font-size: 120%;
+	font-weight: bold;
+}
+
 div.knob_action img {
 	height: 37px;
 	margin-left: 4px;
@@ -62,6 +46,7 @@ div.knob_action img {
 	margin-top: 1px;
 	vertical-align: middle;
 }
+
 div.knob_action_1 {
 	border-right: 10px solid #C0D030;
 }
@@ -74,3 +59,21 @@ div.knob_action_3 {
 div.knob_action_4 {
 	border-right: 10px solid #40D030;
 }
+
+div.knob_action div.action {
+	background-repeat: no-repeat;
+	background-position: right;
+	height: 32px;
+	padding-top: 6px;
+	padding-right: 41px;
+}
+div.knob_action div.rotate {
+	background-image: url("icons/white_icon_action_knob_rotate.png");
+}
+div.knob_action div.short_press {
+	background-image: url("icons/white_icon_action_short_push.png");
+}
+div.knob_action div.bold_press {
+	background-image: url("icons/white_icon_action_bold_push.png");
+}
+

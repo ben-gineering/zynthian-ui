@@ -118,6 +118,8 @@ class zynthian_gui_preset(zynthian_gui_selector_info, zynthian_gui_save_preset):
                     self.zyngui.replace_screen("chain_control")
                 else:
                     self.zyngui.replace_screen("control")
+        elif t == 'B':
+            self.show_preset_options()
 
     def show_preset_options(self):
         options = {}
@@ -125,7 +127,7 @@ class zynthian_gui_preset(zynthian_gui_selector_info, zynthian_gui_save_preset):
         try:
             preset = copy.deepcopy(self.list_data[self.index])
             if preset[2][0] == "❤":
-                preset[2] = preset[2][1:]
+                preset[2] = preset[2][2:]
             preset_name = preset[2]
             title = f"Preset: {preset_name}"
         except:
@@ -239,10 +241,7 @@ class zynthian_gui_preset(zynthian_gui_selector_info, zynthian_gui_save_preset):
             if t == 'S':
                 self.zyngui.toggle_favorites()
                 return True
-        elif swi == 3:
-            if t == 'B':
-                self.show_preset_options()
-                return True
+
         return False
 
     def cuia_toggle_play(self, params=None):
@@ -264,7 +263,7 @@ class zynthian_gui_preset(zynthian_gui_selector_info, zynthian_gui_save_preset):
     def preload_action(self):
         self.preload_timer_id = None
         if self.list_data and self.index < len(self.list_data):
-            self.zyngui.state_manager.start_busy("preload preset")
+            self.zyngui.state_manager.start_busy("preload preset", tts=False)
             self.processor.preload_preset(self.index)
             self.zyngui.state_manager.end_busy("preload preset")
 

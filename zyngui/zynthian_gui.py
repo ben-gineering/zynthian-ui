@@ -28,7 +28,6 @@ import liblo
 import ffmpeg
 import logging
 import traceback
-import importlib
 from time import sleep
 from queue import Empty
 from pathlib import Path
@@ -103,6 +102,7 @@ from zyngui.zynthian_gui_bluetooth import zynthian_gui_bluetooth
 from zyngui.zynthian_gui_cv_config import zynthian_gui_cv_config
 from zyngui.zynthian_gui_brightness_config import zynthian_gui_brightness_config
 from zyngui.zynthian_gui_touchscreen_calibration import zynthian_gui_touchscreen_calibration
+from zyngui.zynthian_gui_tts import zynthian_gui_tts, zynthian_gui_tts_screen
 
 from zyngui.zynthian_gui_control_test import zynthian_gui_control_test
 
@@ -130,15 +130,6 @@ class DebugLock():
         self.lock.release()
 
 class zynthian_gui:
-    # Subsignals are defined inside each module. Here we define GUI subsignals:
-
-    SS_GUI_SHOW_SCREEN = 0
-    SS_GUI_SHOW_SIDEBAR = 1
-    SS_GUI_CONTROL_MODE = 2
-    SS_GUI_SHOW_FILE_SELECTOR = 3
-    SS_GUI_TOGGLE_ALT_MODE = 4
-    SS_GUI_SHOW_MESSAGE = 5
-    SS_GUI_LAUNCHER_MODE = 6
 
     # Screen Modes
     SCREEN_HMODE_NONE = 0
@@ -157,11 +148,8 @@ class zynthian_gui:
         self.screen_history = []
         self.current_screen = None
         self.screen_timer_id = None
-
+        self.screen_lock = Lock()           # Lock object to avoid concurrence problems when showing/closing screens
         self.current_processor = None
-
-        # Lock object to avoid concurrence problems when showing/closing screens
-        self.screen_lock = Lock()
 
         self.state_manager = zynthian_state_manager()
         self.chain_manager = self.state_manager.chain_manager
@@ -219,11 +207,17 @@ class zynthian_gui:
 
         self.prog_change = [0] * 16 # Track last program change for each MIDI channel
 
+        # Restore ZynVoice TTS
+        if zynthian_gui_config.tts_enabled:
+            self.tts = zynthian_gui_tts(self.state_manager)
+        else:
+            self.tts = None
+
     # ---------------------------------------------------------------------------
     # Capture Log
     # ---------------------------------------------------------------------------
 
-    def start_capture_log(self, title="ui_sesion"):
+    def start_capture_log(self, title="ui_session"):
         now = datetime.now()
         self.capture_log_ts0 = now
         self.capture_log_fname = f"{title}-{now.strftime('%Y%m%d%H%M%S')}"
@@ -544,6 +538,7 @@ class zynthian_gui:
         self.screens['brightness_config'] = zynthian_gui_brightness_config()
         self.screens['touchscreen_calibration'] = zynthian_gui_touchscreen_calibration()
         self.screens['control_test'] = zynthian_gui_control_test()
+        self.screens['tts'] = zynthian_gui_tts_screen()
 
         # Root screen
         self.screens['root'] = self.screens['mixer']
@@ -687,8 +682,9 @@ class zynthian_gui:
                 logging.error("Audio Player not created!")
                 self.screen_lock.release()
                 return
-        else:
-            self.current_processor = self.get_current_processor()
+        # WARNING! Modified to fix access to Audio Player file list (bank/presets) => Could have side effects!!
+        elif screen == "chain_control":
+            self.current_processor = self.chain_manager.active_chain.current_processor
 
         if screen not in ("bank", "preset", "option"):
             self.chain_manager.restore_presets()
@@ -929,22 +925,38 @@ class zynthian_gui:
         self.screens['midi_config'].midi_input = False
         self.show_screen('midi_config')
 
-    def show_help(self, topic=None):
-        if not topic:
-            topic = self.current_screen
-        fpath = None
-        if topic == "chain_control":
-            proc = self.get_current_processor()
-            fpath = f"./help/widgets/{proc.name.lower()}.html"
-            if not Path(fpath).exists():
-                fpath = None
-        if not fpath:
-            fpath = f"./help/{zynthian_gui_config.layout['name']}/{topic}.html"
-            if not Path(fpath).exists():
-                fpath = None
-        if fpath:
+    def show_help(self, fpath=None):
+        """ Show HTML help
+        Args:
+            fpath: Full path to the html document, filename for specific view or None for auto detection
+        """
+
+        if fpath == "index:":
             self.screens['help'].load_file(fpath)
-        elif topic != "help":
+            return
+
+        html_root = self.screens["help"].ui_dir + "/help"
+        if not fpath:
+            # Get help path for current view
+            try:
+                curscreen_obj = self.get_current_screen_obj()
+                fpath = curscreen_obj.get_help_fpath()
+            except:
+                fpath = f"{self.current_screen}.html"
+        for b in ("/", "./"):
+            if fpath.startswith(b):
+                fpath = f"{html_root}/{fpath[len(b):]}"
+        p = Path(fpath).resolve()
+        if not p.exists():
+            for dir in [zynthian_gui_config.layout['name'], "core", "widgets"]:
+                fpath = f"{html_root}/{dir}/{p.name}"
+                if Path(fpath).exists():
+                    break
+
+        if Path(fpath).exists():
+            self.screens['help'].load_file(fpath)
+        else:
+            topic = str(fpath).split("/")[-1]
             logging.warning(f"No help for '{topic}'")
 
     # TODO: Rename - this is called for various chain manipulation purposes
@@ -958,43 +970,41 @@ class zynthian_gui:
             self.modify_chain_status = status
 
         if "engine" in self.modify_chain_status:
+            engine = self.modify_chain_status["engine"]
             # We always need an engine for creating or modifying a chain!
             if "chain_id" in self.modify_chain_status:
+                chain_id = self.modify_chain_status["chain_id"]
                 # Modifying an existing chain
                 if "processor" in self.modify_chain_status:
                     # Replacing processor in existing chain
-                    chain = self.chain_manager.get_chain(self.modify_chain_status["chain_id"])
+                    chain = self.chain_manager.get_chain(chain_id)
                     old_processor = self.modify_chain_status["processor"]
                     if chain and old_processor:
-                        slot = chain.get_slot(old_processor)
-                        processor = self.chain_manager.add_processor(self.modify_chain_status["chain_id"],
-                                                                     self.modify_chain_status["engine"], slot)
+                        processor = self.chain_manager.add_processor(chain_id, engine, chain.get_slot(old_processor))
                         if processor:
-                            self.chain_manager.remove_processor(self.modify_chain_status["chain_id"], old_processor)
+                            self.chain_manager.remove_processor(chain_id, old_processor)
                             chain.rebuild_graph()
                             zynautoconnect.autoconnect()
-                            self.close_screen("loading")
-                            self.chain_control(self.modify_chain_status["chain_id"], processor, force_bank_preset=True)
+                            self.chain_control(chain_id, processor, force_bank_preset=True, reset=False)
                 else:
                     # Adding processor to existing chain
                     if "slot" in self.modify_chain_status:
                         slot = self.modify_chain_status["slot"]
                     else:
                         slot = None
-                    processor = self.chain_manager.add_processor(self.modify_chain_status["chain_id"],
-                                                                 self.modify_chain_status["engine"], slot)
+                    processor = self.chain_manager.add_processor(chain_id, engine, slot)
                     if processor:
                         zynautoconnect.autoconnect()
-                        self.close_screen("loading")
-                        self.chain_control(self.modify_chain_status["chain_id"], processor, force_bank_preset=True)
+                        self.chain_control(chain_id, processor, force_bank_preset=True, reset=False)
                     else:
                         #self.show_screen_reset("root")
-                        self.chain_control(self.modify_chain_status["chain_id"])
+                        self.chain_control(chain_id)
                         self.show_info("Failed to create processor", 1500)
             else:
                 # Creating a new chain
                 if "midi_chan" in self.modify_chain_status:
                     # We know the MIDI channel so create a new chain and processor
+                    self.state_manager.start_busy("modify_chain", "Creating New Chain")
                     if "midi_thru" not in self.modify_chain_status:
                         self.modify_chain_status["midi_thru"] = False
                     if "audio_thru" not in self.modify_chain_status:
@@ -1033,14 +1043,15 @@ class zynthian_gui:
                     self.chain_manager.rebuild_optimisation_cache()
                     zynautoconnect.request_audio_connect(True)
                     zynautoconnect.request_midi_connect(True)
-                    if processor and processor.eng_code != "CL":
-                        self.close_screen("loading")
-                        self.screen_history = []
-                        self.chain_control(chain_id, processor, force_bank_preset=True)
+                    self.state_manager.end_busy("modify_chain")
+                    self.screen_history = []
+                    if processor:
+                        if processor.eng_code == "CL":
+                            self.show_screen("launcher")
+                        else:
+                            self.chain_control(chain_id, processor, force_bank_preset=True, reset=True)
                     else:
                         # Created empty chain
-                        # self.chain_manager.set_active_chain_by_id(chain_id)
-                        #self.show_screen_reset("chain_manager")
                         self.chain_control(chain_id)
                 else:
                     # Select MIDI channel
@@ -1060,7 +1071,7 @@ class zynthian_gui:
             # TODO: Offer type selection
             pass
 
-    def chain_control(self, chain_id=None, processor=None, hmode=SCREEN_HMODE_ADD, force_bank_preset=False):
+    def chain_control(self, chain_id=None, processor=None, hmode=SCREEN_HMODE_ADD, force_bank_preset=False, reset=True):
         if chain_id is None:
             chain_id = self.chain_manager.active_chain.chain_id
         else:
@@ -1069,19 +1080,27 @@ class zynthian_gui:
         if processor is None:
             self.current_processor = self.chain_manager.get_active_chain().current_processor
         elif processor in self.chain_manager.get_processors(chain_id):
-            self.current_processor = processor
+            self.set_current_processor(processor)
         else:
             self.current_processor = None
             for t in ["MIDI Synth", "MIDI Tool", "Audio Effect", "Special"]:
                 processors = self.chain_manager.get_processors(chain_id, t)
                 if processors:
-                    self.current_processor = processors[0]
+                    self.set_current_processor(processors[0])
                     break
 
-        if self.current_processor.id < -1:
+        if self.current_processor and self.current_processor.id < -1:
             screen_name = "control"
         else:
             screen_name = "chain_control"
+            if reset:
+                # TODO => Refact current_processor code!
+                # Avoid chain_control reset changing current processor:
+                # => It does for certain engines that doesn't have controllers before chosing a preset.
+                curproc = self.current_processor
+                self.screens["chain_control"].reset()
+                self.set_current_processor(curproc)
+
         if self.current_processor and force_bank_preset:
             # If not preset is selected => bank/preset selector screen
             if not self.current_processor.get_preset_name():
@@ -1096,9 +1115,6 @@ class zynthian_gui:
                         if len(self.current_processor.preset_list):
                             self.current_processor.set_preset(0)
         self.show_screen(screen_name, hmode)
-
-    def show_control(self):
-        self.chain_control()
 
     def toggle_favorites(self):
         curproc = self.get_current_processor()
@@ -1251,7 +1267,7 @@ class zynthian_gui:
     def cuia_last_state_action(self, params=None):
         self.screens['admin'].last_state_action()
 
-    def cuia_workflow_capture_start(self, params=["ui_sesion"]):
+    def cuia_workflow_capture_start(self, params=["ui_session"]):
         self.start_capture_log(params[0])
 
     def cuia_workflow_capture_stop(self, params=None):
@@ -1259,6 +1275,64 @@ class zynthian_gui:
 
     def cuia_workflow_capture_text(self, params=None):
         self.write_capture_log(f"TEXT: {params[0]}")
+
+    # ZynVoice TTS actions
+    def cuia_tts_announce(self, params=["", True, False, True]):
+        """ Announce a TTS message
+        Params:
+            text: Text to append
+            replace: True to clear queue and replace with this text
+            urgent: True to play next. False to append to end of queue.
+            interrupt: True to interrupt currently playing message. False to finish current announcement.
+        """
+        if self.tts:
+            self.tts.announce(*params)
+
+    def cuia_tts_stop(self, params=None):
+        """ Stop current TTS announcement. Clear queue. """
+        if self.tts:
+            self.tts._tts.stop()
+
+    def cuia_tts_pause(self, params=None):
+        """ Pause current TTS announcement. Do not clear queue. """
+        if self.tts:
+            self.tts._tts.pause(True)
+
+    def cuia_tts_resume(self, params=None):
+        """ Resume paused TTS queue. """
+        if self.tts:
+            self.tts._tts.pause(False)
+
+    def cuia_tts_toggle_pause(self, params=None):
+        """ Toggle TTS pause """
+        if self.tts:
+            self.tts._tts.pause()
+
+    def cuia_tts_toggle_enable(self, params=None):
+        """ Toggle the TTS enabled state """
+
+        if self.tts:
+            zynthian_gui_config.tts_enabled = 0
+            self.tts.close()
+            self.tts = None
+        else:
+            zynthian_gui_config.tts_enabled = 1
+            self.tts = zynthian_gui_tts(self.state_manager)
+        zynconf.save_config({"ZYNTHIAN_TTS_ENABLED": str(zynthian_gui_config.tts_enabled)}, False)
+        if self.screens["tts"].shown:
+            self.screens["tts"].update_list()
+
+    def cuia_tts_toggle_playback(self, params=None):
+        """ Stop TTS if playing, else announce context info """
+        if self.tts:
+            if self.tts._tts.playing:
+                self.tts._tts.stop()
+            else:
+                screen = self.screens[self.current_screen]
+                try:
+                    screen.tts_info()
+                except:
+                    self.tts.announce(f"View: {self.current_screen}", replace="True", interrupt=True)
 
     # Panic Actions
 
@@ -1299,7 +1373,7 @@ class zynthian_gui:
         self.state_manager.audio_recorder.stop_recording()
 
     def cuia_toggle_audio_record(self, params=None):
-        if self.current_processor.eng_code == "AP":
+        if self.current_processor and self.current_processor.eng_code == "AP":
             self.state_manager.audio_recorder.toggle_recording(self.current_processor)
         else:
             self.state_manager.audio_recorder.toggle_recording()
@@ -1329,7 +1403,7 @@ class zynthian_gui:
             self.screens['bank'].click_listbox()
         elif n_banks == 0:
             self.close_screen()
-            self.close_screen()
+            #self.close_screen()
 
     def cuia_start_midi_record(self, params=None):
         self.state_manager.start_midi_record()
@@ -1480,9 +1554,13 @@ class zynthian_gui:
 
     # Back action
     def cuia_back(self, params=None):
+        self.back_screen()
+
+    # Select action => it receives type of action: S, B, L
+    def cuia_select_action(self, params=None):
         try:
-            self.back_screen()
-        except:
+            self.get_current_screen_obj().switch_select(params[0])
+        except (AttributeError, TypeError):
             pass
 
     # Select element in list => it receives an integer parameter!
@@ -1561,11 +1639,27 @@ class zynthian_gui:
         self.show_screen("launcher")
 
     def cuia_screen_pattern_editor(self, params=None):
-        success = False
         if self.current_screen == "launcher":
             success = self.screens['launcher'].edit_clip()
+        else:
+            success = False
         if not success:
-            self.show_screen("pattern_editor")
+            # If active chain is not a MIDI chain (Synth or MIDI FXs that receives a single MIDI channel) ...
+            midi_chan = self.chain_manager.get_active_chain().midi_chan
+            if midi_chan is None or midi_chan > 15:
+                # Set active the first MIDI chain taht receives a single MIDI channel, if any
+                midi_chain_ids = self.chain_manager.get_chain_ids_filtered(["synth", "midi"])
+                if midi_chain_ids:
+                    for chain_id in midi_chain_ids:
+                        midi_chan = self.chain_manager.chains[chain_id].midi_chan
+                        if midi_chan is not None and midi_chan <= 15:
+                            self.chain_manager.set_active_chain_by_id(chain_id)
+                            break
+            if midi_chan is not None and midi_chan <= 15:
+                self.screens['launcher'].edit_pattern()
+            else:
+                # Can't open pattern editor if no MIDI chain does exist!
+                pass
 
     def cuia_screen_calibrate(self, params=None):
         self.calibrate_touchscreen()
@@ -1595,6 +1689,13 @@ class zynthian_gui:
 
     def cuia_main_menu(self, params=None):
         self.show_screen("main_menu")
+
+    def cuia_add_chain(self, params=None):
+        pos = self.chain_manager.get_active_chain_index() + 1
+        if pos >= len(self.chain_manager.chains):
+            pos = len(self.chain_manager.chains) - 1
+        self.screens["add_chain"].set_chain_pos(pos)
+        self.show_screen("add_chain")
 
     def cuia_chain_control(self, params=None):
         try:
@@ -1672,12 +1773,12 @@ class zynthian_gui:
                     bank_list = curproc.get_bank_list()
                     if len(curproc.preset_list) > 0 and curproc.preset_list[0][0] != '':
                         self.screens['preset'].index = curproc.get_preset_index()
-                        self.show_screen('preset', hmode=zynthian_gui.SCREEN_HMODE_ADD)
+                        self.show_screen('preset')
                         if len(curproc.preset_list) == 0 or curproc.preset_list[0][0] == '':
                             # Handle change of bank name, e.g. via webconf
                             self.replace_screen('bank')
                     elif len(bank_list) > 0 and bank_list[0][0] != '':
-                        self.show_screen('bank', hmode=zynthian_gui.SCREEN_HMODE_ADD)
+                        self.show_screen('bank')
                     else:
                         self.show_screen('preset', hmode=zynthian_gui.SCREEN_HMODE_NONE)
                         self.screens['preset'].show_preset_options()
@@ -1769,7 +1870,7 @@ class zynthian_gui:
     def cuia_midi_learn_control_options(self, params=None):
         scrobj = self.get_midi_learn_screen_obj()
         if scrobj:
-            scrobj.midi_learn_options(params[0])
+            scrobj.controller_options(params[0])
 
     # Learn control
     def cuia_midi_learn_control(self, params=None):
@@ -2210,6 +2311,7 @@ class zynthian_gui:
                 self.screens[self.current_screen].disable_param_editor()
             except:
                 pass
+            #self.zyngui.show_screen("main_menu")
             self.show_screen_reset('root')
             return True
 
@@ -2257,11 +2359,14 @@ class zynthian_gui:
             return self.custom_switch_ui_action(i - 4, "S")
 
     # ------------------------------------------------------------------
-    # Defered Switch Events
+    # Defered Events
     # ------------------------------------------------------------------
 
     def zynswitch_defered(self, t, i):
         self.cuia_queue.put_nowait(("zynswitch", (i, t)))
+
+    def after_idle(self, func, *args):
+        zynthian_gui_config.top.after_idle(func, *args)
 
     # ------------------------------------------------------------------
     # Read Physical Zynswitches
@@ -2288,14 +2393,14 @@ class zynthian_gui:
         zynsigman.register(zynsigman.S_MIDI, zynsigman.SS_MIDI_NOTE_OFF, self.cb_midi_note_off)
         zynsigman.register_queued(zynsigman.S_GUI, zynsigman.SS_GUI_SHOW_FILE_SELECTOR, self.cb_show_file_selector)
         zynsigman.register_queued(zynsigman.S_GUI, zynsigman.SS_GUI_SHOW_MESSAGE, self.cb_show_message)
-        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
+        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, zynsigman.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
 
     def unregister_signals(self):
         zynsigman.unregister(zynsigman.S_MIDI, zynsigman.SS_MIDI_NOTE_ON, self.cb_midi_note_on)
         zynsigman.unregister(zynsigman.S_MIDI, zynsigman.SS_MIDI_NOTE_OFF, self.cb_midi_note_off)
         zynsigman.unregister(zynsigman.S_GUI, zynsigman.SS_GUI_SHOW_FILE_SELECTOR, self.cb_show_file_selector)
         zynsigman.unregister(zynsigman.S_GUI, zynsigman.SS_GUI_SHOW_MESSAGE, self.cb_show_message)
-        zynsigman.unregister(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
+        zynsigman.unregister(zynsigman.S_CHAIN_MAN, zynsigman.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
 
     def cb_midi_note_on(self, izmip, chan, note, vel):
         """Handle MIDI_NOTE_ON signal
@@ -2460,7 +2565,7 @@ class zynthian_gui:
         busy_timeout = 0
         busy_warn_time = 300
         while not self.exit_flag:
-            if self.state_manager.is_busy():
+            if self.state_manager.is_busy() and (monotonic() - self.state_manager.busy_ts) > 0.1 :
                 busy_timeout += 1
                 busy_message = self.state_manager.get_busy_message()
                 busy_details = self.state_manager.get_busy_details()

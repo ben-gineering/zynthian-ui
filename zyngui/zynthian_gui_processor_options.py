@@ -28,7 +28,7 @@ import random
 from copy import copy
 
 # Zynthian specific modules
-from zyngui.zynthian_gui_selector import zynthian_gui_selector
+from zyngui.zynthian_gui_selector_info import zynthian_gui_selector_info
 import zynautoconnect
 
 # ------------------------------------------------------------------------------
@@ -36,11 +36,11 @@ import zynautoconnect
 # ------------------------------------------------------------------------------
 
 
-class zynthian_gui_processor_options(zynthian_gui_selector):
+class zynthian_gui_processor_options(zynthian_gui_selector_info):
 
     def __init__(self, parent=None, topbar=None):
         self.reset()
-        super().__init__('Option', wide=True, parent=parent, topbar=topbar)
+        super().__init__('Option', parent=parent, topbar=topbar)
 
     def reset(self):
         self.index = 0
@@ -51,41 +51,61 @@ class zynthian_gui_processor_options(zynthian_gui_selector):
         self.list_data = []
 
         self.list_data.append((None, None, "> Manage this processor"))
+
+        # TODO Implement bypass for MIDI processors!!
+        if self.processor.type == "Audio Effect" and self.processor.eng_code not in ("MI", "MR"):
+                if self.processor.is_bypassed():
+                    title = "\u2612 Bypass"
+                else:
+                    title = "\u2610 Bypass"
+                self.list_data.append((self.processor_bypass, None, title, ["Bypass this processor.", None]))
+
         # Move processor
         if self.processor.type not in ("MIDI Synth", "Audio Generator") and self.processor.chain is not None:
             if self.processor.chain.get_processor_count(self.processor.type) > 1:
-                self.list_data.append((self.start_move, None, "Move"))
+                self.list_data.append((self.start_move, None, "Move",
+                                       ["Move processor position within chain.\n\nUse knob 3 to nudge along chain, moving between parallel and serial positioning. Use knob 4 to move to another chain.", None]))
 
         # Replace and Remove processor
         if self.processor.eng_code not in ("MI", "MR"):
             if self.processor.type == "MIDI Synth":
                 eng_options = self.processor.engine.get_options()
                 if eng_options['replace']:
-                    self.list_data.append((self.replace, None, f"Replace {self.processor.name}"))
+                    self.list_data.append((self.replace, None, f"Replace {self.processor.name}",
+                                           ["Replace this processor with another of simlar type.\n\nThe engine selection list will show, allowing selection of a new engine type.", None]))
             else:
-                self.list_data.append((self.replace, None, "Replace"))
+                self.list_data.append((self.replace, None, "Replace",
+                                           ["Replace this processor with another of simlar type.\n\nThe engine selection list will show, allowing selection of a new engine type.", None]))
 
             if self.processor.type == "MIDI Tool" or self.processor.type == "Audio Effect":
-                self.list_data.append((self.processor_remove, None, "Remove"))
+                self.list_data.append((self.processor_remove, None, "Remove",
+                                       ["Remove this processor from the chain.", None]))
 
         #if len(self.processor.get_bank_list()) > 1 or len(self.processor.preset_list) > 0 and self.processor.preset_list[0][0] != '':
         #    self.list_data.append((self.preset_list, None, "Presets"))
 
         if self.processor.type == "MIDI Synth":
-            self.list_data.append((self.randomize, None, "Randomize parameters"))
+            self.list_data.append((self.randomize, None, "Randomize parameters",
+                                   ["Change all processor parameters to random values.\n\nThis is truely random so may produce undesirable effect, but can undo randomization.", None]))
             if self.last_random:
-                self.list_data.append((self.undo_randomize, None, "Undo Randomize"))
+                self.list_data.append((self.undo_randomize, None, "Undo Randomize",
+                                       ["Undo the last parameter randomization.", None]))
 
-        self.list_data.append((self.midi_clean, None, "Clean MIDI-learn"))
+        self.list_data.append((self.midi_clean, None, "Clean MIDI-learn",
+                               ["Remove CC bindings from all parameters in this processor.", None]))
         #self.list_data.append((self.control_view, None, "Control View"))
         # Processor info
-        self.list_data.append((self.show_details, None, "Info"))
+        self.list_data.append((self.show_details, None, "Info",
+                               ["Show information about this processor.", None]))
 
         self.list_data.append((None, None, "> Add to chain"))
+        pos = "series" if self.processor.type in ["MIDI Synth", "MIDI Tool"] or self.processor.eng_code in ["MI", "MX"] else "parallel"
         if self.processor.type in ("MIDI Synth", "MIDI Tool"):
-            self.list_data.append((self.add_midi_processor, None, "Insert MIDI Processor"))
+            self.list_data.append((self.add_midi_processor, None, "Insert MIDI Processor",
+                                   [f"Insert a new MIDI processor in the chain in {pos} with this processor.", None]))
         if self.processor.type in ("MIDI Synth", "Audio Effect", "Audio Generator"):
-            self.list_data.append((self.add_audio_processor, None, "Insert Audio Processor"))
+            self.list_data.append((self.add_audio_processor, None, "Insert Audio Processor",
+                                   [f"Insert a new audio processor in the chain in {pos} with this processor.", None]))
 
         super().fill_list()
 
@@ -142,24 +162,27 @@ class zynthian_gui_processor_options(zynthian_gui_selector):
     def add_audio_processor(self):
         self.add_processor("Audio Effect")
 
+    def processor_bypass(self):
+        self.processor.toggle_bypass()
+        self.update_list()
+
     def processor_remove(self):
         self.zyngui.show_confirm(f"Do you want to remove {self.processor.engine.name} from chain?", self.do_remove)
 
     def do_remove(self, unused=None):
-        self.zyngui.close_screen()
-        self.zyngui.chain_manager.remove_processor(
-            self.zyngui.chain_manager.active_chain.chain_id, self.processor)
+        self.zyngui.chain_manager.remove_processor(self.zyngui.chain_manager.active_chain.chain_id, self.processor)
         zynautoconnect.request_audio_connect(True)
         zynautoconnect.request_midi_connect(True)
         self.processor = None
+        self.zyngui.close_screen()
 
     def preset_list(self):
         self.zyngui.cuia_bank_preset(self.processor)
 
     def midi_clean(self):
         if self.processor:
-            self.zyngui.show_confirm(
-                f"Do you want to clean MIDI-learn for ALL controls in {self.processor.name}?", self.zyngui.chain_manager.clean_midi_learn, self.processor)
+            self.zyngui.show_confirm(f"Do you want to clean MIDI-learn for ALL controls in {self.processor.name}?",
+                                     self.zyngui.chain_manager.clean_midi_learn, self.processor)
 
     def control_view(self):
         self.zyngui.chain_control(hmode=self.zyngui.SCREEN_HMODE_REPLACE)
@@ -202,8 +225,7 @@ class zynthian_gui_processor_options(zynthian_gui_selector):
 
     def set_select_path(self):
         if self.processor:
-            self.select_path.set("{} > Processor Options".format(
-                self.processor.get_basepath()))
+            self.select_path.set("{} > Processor Options".format(self.processor.get_basepath()))
         else:
             self.select_path.set("Processor Options")
 

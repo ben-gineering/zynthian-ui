@@ -4,63 +4,91 @@
  </head>
 
  <body>
- <div class="knobs_action_container">
-  <div class="knob_action knob_action_1">
-   <div>chain volume<img src="icons/white_icon_action_knob_rotate.png"></div>
-   <div>chain solo<img src="icons/white_icon_action_short_push.png"></div>
-   <div>---<img src="icons/white_icon_action_bold_push.png"></div>
+  <div class="knobs_action_container">
+   <div class="knob_action knob_action_1">
+    <div class="knob_title">param 1</div>
+    <div class="action rotate">value</div>
+    <div class="action short_press">midi learn</div>
+    <div class="action bold_press">options</div>
+   </div>
+   <div class="knob_action knob_action_2">
+    <div class="knob_title">param 2</div>
+    <div class="action rotate">value</div>
+    <div class="action short_press">midi learn</div>
+    <div class="action bold_press">options</div>
+   </div>
+   <div class="knob_action knob_action_3">
+    <div class="knob_title">param 3</div>
+    <div class="action rotate">value</div>
+    <div class="action short_press">midi learn</div>
+    <div class="action bold_press">options</div>
+   </div>
+   <div class="knob_action knob_action_4">
+    <div class="knob_title">param 4</div>
+    <div class="action rotate">value</div>
+    <div class="action short_press">midi learn</div>
+    <div class="action bold_press">options</div>
+   </div>
   </div>
-  <div class="knob_action knob_action_2">
-   <div>chain balance<img src="icons/white_icon_action_knob_rotate.png"></div>
-   <div>chain mute<img src="icons/white_icon_action_short_push.png"></div>
-   <div>---<img src="icons/white_icon_action_bold_push.png"></div>
+
+  <div class="left_container">
+   <h1>Chain Control View</h1>
+   <div id="zynproc-info"></div>
+   <p>The chain control view provides access to the parameters of the processors in the active chain. You can:</p>
+   <ul>
+    <li>Modify the value of processor parameters by <b>rotating the knobs</b>.</li>
+    <li>MIDI learn parameters by <b>short pressing the knobs</b></li>
+    <li>Configure parameter control options by <b>bold pressing the knobs</b>.</li>
+   </ul>
+   <p>Processor parameters are grouped in pages with up to 4 parameters per page. Select pages
+   using the UP / DOWN buttons. The list contains the control pages for all processors in the chain.</p>
+   <p>To move faster across the pages, enter <a href="chain_config.html">select mode</a> with:
+   <ul>
+    <li><b>short press SELECT</b></li> or
+    <li><b>short press OPT</b></li>
+   </ul>
+   <p>Note that <b>select mode</b> is also known as the <b>chain config</b> view.</p>
   </div>
-  <div class="knob_action knob_action_3">
-   <div>main volume<img src="icons/white_icon_action_knob_rotate.png"></div>
-   <div>add chain<img src="icons/white_icon_action_short_push.png"></div>
-   <div>---<img src="icons/white_icon_action_bold_push.png"></div>
+
+   <div class="full_container">
+   <h2>MIDI Learn</h2>
+   <p>You can bind any parameter to knobs, faders and CC-pads on your external MIDI controllers.
+   There are 2 different MIDI learn modes:</p>
+  <ul>
+   <li><b>Chain Learn:</b> Binding is only to the selected chain. You can
+   bind the same knob to one or several parameters in the same or different chains. Only the
+   selected chain will react to the MIDI CC message.</li>
+   <li><b>Global Learn:</b> The bind is global. You can bind the same knob
+   to one or several parameters in the same or different chains. All of them will react, no
+   matter the selected chain.</li>
+  </ul>
+  The MIDI learn procedure is:
+    <ul>
+    <li><b>short press</b> the knob associated with the parameter you want to learn. A green indication
+    <span style="color: #70FF70">??#??</span> will be displayed indicating the parameter is in <b>chain learning mode</b>.</li>
+    <li>if required, short press again to enter <b>global learning mode</b>. The indication will change to yellow:
+    <span style="color: yellow">??#??</span>.</li>
+    <li><b>move a knob/fader</b> or <b>tap a CC-pad</b> on your external MIDI controller. The binding is complete and the
+    indication now shows then MIDI channel and CC number in white.</li>
+   </ul>
+
+   <h2>Parameter control options</h2>
+   <p><b>Bold press any knob</b> to access the controller options for the associated parameter:</p>
+   <ul>
+    <li><b>Chain Controller:</b> When checked, the parameter is added to the chain controller pages,
+    at the beginning of the page list. This feature acts as a kind of "favorite parameters" for the chain.</li>
+    <li><b>X-Y touchpad:</b> When numeric parameters have been selected for X and Y axis, "Show Touchpad"
+    option is available and you can X-Y control both parameters at once using your finger "a la chaos-pad".</li>
+    <li><b>Absolute/Relative Mode:</b> Allows to configure incremental knobs (encoders).</li>
+    <li><b>CC Value Range:</b> Configure how MIDI CC values are mapped to the associated parameter.</li>
+    <li><b>Chain Learn:</b> Start Chain MIDI learn for the parameter.</li>
+    <li><b>Global Learn:</b> Start Global MIDI learn for the parameter.</li>
+    <li><b>Zynstep CC:</b> Choose the CC number used by the sequencer to automate the parameter.</li>
+    <li><b>Unlearn:</b> Unlearn the parameter.</li>
+    <li><b>Unlearn all controls:</b> Unlearn all parameters in the processor.</li>
+   </ul>
   </div>
-  <div class="knob_action knob_action_4">
-   <div>select chain<img src="icons/white_icon_action_knob_rotate.png"></div>
-   <div>chain control<img src="icons/white_icon_action_short_push.png"></div>
-   <div>chain options<img src="icons/white_icon_action_bold_push.png"></div>
-  </div>
- </div>
 
- <div class="left_container">
-  <h1>Chain Control</h1>
-  <p>The audio mixer is the zynthian's main view. You can always access
-   the mixer by pushing the MIX button. You can also push BACK until reaching it.</p>
-  <p>It's composed of vertical strips associated with chains. Initially it will be empty, showing the main strip alone.
-   For each chain you create, a new strip is added to the mixer. There can be more mixer strips than can be displayed.
-   They will scroll left / right if you select a strip that is off screen.</p>
-  <p>Each strip is an interactive widget that can be manipulated in several ways and it shows status info about the
-   associated chain.<p>
-  <p>From top to bottom:</p>
- </div>
-
- <div class="right_float_container">
-  <img src="img/mixer_strip_legend_bg_black.png" class="full">
- </div>
-
- <div class="left_container">
- <ul>
-  <li><b>Solo:</b> Solo flag. Push to toggle. This is a non-exclusive solo mode. When a chain has solo enabled, all
-   other chains without solo enabled will be muted, allowing auditioning of one or more chains. The <i>main</i> solo
-   will disable all chain solos.</li>
-  <li><b>Mute:</b> Mute flag. Push to toggle. When a chain is muted ("mute" enabled), it will remain silent.</li>
-  <li><b>Fader:</b> Mixing volume for the associated chain. Rotate knob #1 or drag up & down to modify the fader level.
-   On the touchscreen you can drag multiple faders at once. Tap it to set the active chain.</li>
-  <li><b>DPM:</b> Digital Peak Meter for the associated chain, covering the range from -50dBFS to 0dBFS. </li>
-  <li><b>Description:</b> A vertically oriented text describing the chain. By default, for a synth chain it will show
-   synth processor and preset name. If you give a name to the chain, this will be included in the description too.</li>
-  <li><b>Balance/Pan:</b> Mixing right/left balance (or pan of a mono signal) for the associated chain. Rotate knob#2
-   or drag left & right on the fader to modify.</li>
-  <li><b>Legend:</b> It shows an icon for the chain's type and a number for the assigned MIDI channel. Tap it to access
-   the chain's control view.</li>
- </ul>
- </div>
-
- <div class="clear"></div>
+  <div class="clear"></div>
  </body>
 </html>

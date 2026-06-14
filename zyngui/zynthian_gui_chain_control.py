@@ -24,9 +24,9 @@
 # ******************************************************************************
 
 import logging
+from pathlib import Path
 
 # Zynthian specific modules
-import zynautoconnect
 from zyngine.zynthian_signal_manager import zynsigman
 
 from zyngui import zynthian_gui_config
@@ -35,7 +35,6 @@ from zyngui.zynthian_side_chain import zynthian_side_chain
 
 from zyngui.zynthian_gui_control import zynthian_gui_control
 from zyngui.zynthian_gui_chain_options import zynthian_gui_chain_options
-#from zyngui.zynthian_gui_processor_options import zynthian_gui_processor_options
 from zyngui.zynthian_gui_midi_config import zynthian_gui_midi_config
 from zyngui.zynthian_gui_audio_in import zynthian_gui_audio_in
 from zyngui.zynthian_gui_audio_out import zynthian_gui_audio_out
@@ -88,13 +87,15 @@ class zynthian_gui_chain_control(zynthian_gui_base):
 
     def show_chain(self, show):
         if show:
-            self.chain_shown = True
-            self.update_layout()
-            self.chain_canvas.grid(row=0, column=0, padx=(0, 2), pady=(0, 0), sticky="NEWS")
+            if not self.chain_shown:
+                self.chain_shown = True
+                self.update_layout()
+                self.chain_canvas.grid(row=0, column=0, padx=(0, 2), pady=(0, 0), sticky="NEWS")
         else:
-            self.chain_shown = False
-            self.update_layout()
-            self.chain_canvas.grid_remove()
+            if self.chain_shown:
+                self.chain_shown = False
+                self.update_layout()
+                self.chain_canvas.grid_remove()
 
     def toggle_chain(self):
         self.show_chain(not self.chain_shown)
@@ -102,22 +103,28 @@ class zynthian_gui_chain_control(zynthian_gui_base):
     def refresh_chain(self):
         self.chain_canvas.build_graph()
 
+    def reset(self):
+        self.set_chain(reset=True)
+
     def build_view(self):
-        super().build_view()
+        if self.chain_shown:
+            self.chain_canvas.build_view()
+            self.refresh_chain()
+        if not self.subscreen.shown:
+            self.subscreen.build_view()
+            self.subscreen.show()
         if not self.shown:
-            zynsigman.register_queued(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
-        self.set_chain()
-        self.subscreen.show()
+            zynsigman.register_queued(zynsigman.S_CHAIN_MAN, zynsigman.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
         return True
 
     def hide(self):
         if self.shown:
-            zynsigman.unregister(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
+            zynsigman.unregister(zynsigman.S_CHAIN_MAN, zynsigman.SS_SET_ACTIVE_CHAIN, self.cb_set_active_chain)
         self.chain_canvas.hide()
         self.subscreen.hide()
         super().hide()
 
-    def set_chain(self, chain_id=None):
+    def set_chain(self, chain_id=None, reset=False):
         if chain_id is None:
             self.chain_id = self.chain_manager.active_chain.chain_id
         else:
@@ -125,8 +132,20 @@ class zynthian_gui_chain_control(zynthian_gui_base):
         self.chain = self.chain_manager.chains[self.chain_id]
         self.zyngui.current_processor = self.chain.current_processor
 
-        self.chain_canvas.set_chain(self.chain_id)
-        self.chain_canvas.build_view()
+        if reset:
+            if not self.chain.current_processor:
+                self.chain_canvas.set_chain(self.chain_id, proc="chain_options")
+                self.chain_canvas.build_view()
+                self.show_chain(True)
+            else:
+                self.chain_canvas.set_chain(self.chain_id, proc=self.chain.current_processor)
+                self.chain_canvas.build_view()
+                self.show_chain(False)
+                self.subscreen.set_mode_control()
+        else:
+            self.chain_canvas.set_chain(self.chain_id, proc=None)
+            self.chain_canvas.build_view()
+
 
     def cb_set_active_chain(self, active_chain_id):
         self.set_chain(active_chain_id)
@@ -143,13 +162,16 @@ class zynthian_gui_chain_control(zynthian_gui_base):
                 case "midi_input":
                     self.subscreen_key = "midi_config"
                     self.subscreen = self.subscreens[self.subscreen_key]
-                    self.subscreen.set_chain(self.chain)
                     self.subscreen.midi_input = True
+                    self.subscreen.set_chain(self.chain)
                 case "midi_output":
                     self.subscreen_key = "midi_config"
                     self.subscreen = self.subscreens[self.subscreen_key]
-                    self.subscreen.set_chain(self.chain)
                     self.subscreen.midi_input = False
+                    self.subscreen.set_chain(self.chain)
+                case "chain_controllers":
+                    self.subscreen_key = "control"
+                    self.subscreen = self.subscreens[self.subscreen_key]
                 case _:
                     self.subscreen_key = self.subscreen_name
                     self.subscreen = self.subscreens[self.subscreen_key]
@@ -159,27 +181,31 @@ class zynthian_gui_chain_control(zynthian_gui_base):
             self.subscreen = self.subscreens[self.subscreen_key]
 
     def show_subscreen(self, ssname, proc=None, force=False):
-        # Avoid ugly flickering by hiding the old screen after displaying the new one
-        if ssname != self.subscreen_name:
-            old_screen = self.subscreen
-        else:
-            old_screen = None
-        if old_screen or force:
+        old_subscreen_key = self.subscreen_key
+        if ssname != self.subscreen_name or force:
             self.config_subscreen(ssname)
             self.subscreen.configure(width=self.subscreen_width, height=self.height)
             self.subscreen.build_view()
             self.subscreen.show()
-            if old_screen:
-                old_screen.hide()
-        elif self.subscreen_name == "control" and proc:
+            # Avoid ugly flickering by hiding the old screen after displaying the new one
+            if old_subscreen_key != self.subscreen_key:
+                self.subscreens[old_subscreen_key].hide()
+        if self.subscreen_key == "control":
             self.subscreen.select_processor(proc)
+        elif not self.chain_shown:
+            self.show_chain(True)
 
     def select_subscreen(self, ssname, proc=None, show_chain=True):
         if ssname == "control":
             self.chain_canvas.select_node(proc=proc, action=True)
         else:
             self.chain_canvas.select_node(proc=ssname, action=True)
-        self.show_chain(show_chain)
+        if show_chain != self.chain_shown:
+            self.show_chain(show_chain)
+
+    def refresh_subscreen(self):
+        if self.subscreen_key == "control":
+            self.subscreen.update_list()
 
     # --------------------------------------------------------------------------
     # Zynpot & zynswitch callbacks
@@ -208,7 +234,7 @@ class zynthian_gui_chain_control(zynthian_gui_base):
     def switch_select(self, t):
         if t == 'S':
             self.subscreen.switch_select(t)
-            if self.subscreen_name == "control":
+            if self.subscreen_key == "control":
                 if self.subscreen.mode == "select":
                     self.show_chain(True)
                 else:
@@ -222,7 +248,8 @@ class zynthian_gui_chain_control(zynthian_gui_base):
             return True
         if self.chain_shown:
             self.show_chain(False)
-            self.chain_canvas.select_current_processor(action=True)
+            proc = self.subscreens["control"].get_selected_processor()
+            self.chain_canvas.select_processor(proc=proc, action=True)
             self.subscreen.set_mode_control()
             return True
         return False
@@ -238,8 +265,9 @@ class zynthian_gui_chain_control(zynthian_gui_base):
                 self.chain_canvas.arrow_up()
             return True
         if self.subscreen.zynpot_cb(i, dval):
-            if self.subscreen_name == "control" and i == 3:
-                self.chain_canvas.select_current_processor()
+            if self.subscreen_key == "control" and i == 3:
+                proc=self.subscreen.get_selected_processor()
+                self.chain_canvas.select_processor(proc=proc)
             return True
 
     def plot_zctrls(self, force=False):
@@ -282,22 +310,24 @@ class zynthian_gui_chain_control(zynthian_gui_base):
 
     def cuia_arrow_up(self, params=None):
         self.subscreen.arrow_up()
-        if self.subscreen_name == "control":
-            self.chain_canvas.select_current_processor()
         return True
 
     def cuia_arrow_down(self, params=None):
         self.subscreen.arrow_down()
-        if self.subscreen_name == "control":
-            self.chain_canvas.select_current_processor()
         return True
 
     def cuia_arrow_right(self, params=None):
-        self.chain_manager.next_chain()
+        if self.chain_shown:
+            self.chain_canvas.arrow_down()
+        else:
+            self.chain_manager.next_chain()
         return True
 
     def cuia_arrow_left(self, params=None):
-        self.chain_manager.previous_chain()
+        if self.chain_shown:
+            self.chain_canvas.arrow_up()
+        else:
+            self.chain_manager.previous_chain()
         return True
 
     def update_wsleds(self, leds):
@@ -318,9 +348,9 @@ class zynthian_gui_chain_control(zynthian_gui_base):
                     return
             zynthian_gui_config.zyngui.show_screen('chain_manager')
         else:
+            if self.subscreen_key == "control":
+                self.subscreen.set_mode_select()
             self.show_chain(True)
-            if self.subscreen_name == "control":
-                self.subscreen.set_mode_control()
             return
 
     def toggle_menu(self):
@@ -328,5 +358,30 @@ class zynthian_gui_chain_control(zynthian_gui_base):
             self.show_menu()
         elif self.zyngui.get_current_screen().endswith("_options"):
             self.zyngui.close_screen()
+
+    def get_help_fpath(self):
+        if self.subscreen_key == "control":
+            proc = self.zyngui.get_current_processor()
+            fpath = f"./help/widgets/{proc.name.lower()}.html"
+        else:
+            fpath = None
+        if not fpath or not Path(fpath).exists():
+            if self.subscreen_key == "control":
+                if self.chain_shown:
+                    page_name = "chain_config"
+                else:
+                    page_name = "chain_control"
+            else:
+                page_name = "selector"
+            fpath = f"{page_name}.html"
+        return fpath
+
+    # --------------------------------------------------------------------------
+    # ZynVoice TTS
+    # --------------------------------------------------------------------------
+
+    def tts_info(self):
+        if self.subscreen:
+            self.subscreen.tts_info()
 
 # ------------------------------------------------------------------------------

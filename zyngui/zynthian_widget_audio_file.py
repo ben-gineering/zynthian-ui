@@ -28,13 +28,12 @@ import logging
 import tkinter
 import soundfile
 import traceback
-from math import modf
+from math import modf, pow
 from threading import Thread
 from os.path import basename
 
 # Zynthian specific modules
 from zyngine.zynthian_signal_manager import zynsigman
-from zyngine.zynthian_audio_recorder import zynthian_audio_recorder
 from zyngui import zynthian_gui_config
 from zyngui import zynthian_widget_base
 
@@ -72,6 +71,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
         self.crop_end = 0
         self.beats = 0
         self.warp = False
+        self.gain = 1
         self.last_progress = 0
 
         self.bg_color = zynthian_gui_config.color_bg
@@ -157,11 +157,11 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
         self.refreshing = False
         super().show()
         if self.clip_info:
-            zynsigman.register_queued(zynsigman.S_AUDIO_RECORDER, zynthian_audio_recorder.SS_AUDIO_RECORDER_STATE, self.audio_recorder_cb)
+            zynsigman.register_queued(zynsigman.S_AUDIO_RECORDER, zynsigman.SS_AUDIO_RECORDER_STATE, self.audio_recorder_cb)
 
     def hide(self):
         if self.clip_info:
-            zynsigman.unregister(zynsigman.S_AUDIO_RECORDER, zynthian_audio_recorder.SS_AUDIO_RECORDER_STATE, self.audio_recorder_cb)
+            zynsigman.unregister(zynsigman.S_AUDIO_RECORDER, zynsigman.SS_AUDIO_RECORDER_STATE, self.audio_recorder_cb)
         super().hide()
 
     def on_size(self, event):
@@ -245,7 +245,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
             self.frames = 0
             self.sf = None
 
-    def draw_waveform(self, start, length):
+    def draw_waveform(self, start, length, gain=1.0):
         if self.sf is None:
             self.widget_canvas.itemconfig(f"waveform", state=tkinter.HIDDEN)
             self.widget_canvas.itemconfig(f"overlay", state=tkinter.HIDDEN)
@@ -266,7 +266,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
         y_offsets = []
         for i in range(self.channels):
             y_offsets.append(y0 * (i + 0.5))
-        y0 //= 2
+        y0 = int(pow(1.26, gain) * y0 / 2)
 
         if large_file:
             frames_per_pixel = length // self.width
@@ -364,6 +364,10 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
                 self.beats = self.monitors["beats"]
                 update_markers = True
 
+        if "gain" in self.monitors and self.gain != self.monitors["gain"]:
+                self.gain = self.monitors["gain"]
+                self.refresh_waveform = True
+
         try:
             if self.zctrl and self.fpath != self.zctrl.value:
                 # Audio file changed so reload waveform from file audio data
@@ -384,7 +388,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
                 # Ensure whoe waveform can be drawn
                 self.offset = min(self.offset, self.frames - length)
                 self.offset = max(self.offset, 0)
-                self.draw_waveform(self.offset, length)
+                self.draw_waveform(self.offset, length, self.gain)
                 refresh_info = True
                 update_markers = True
                 self.refresh_waveform = False
@@ -400,7 +404,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
                     self.widget_canvas.coords(self.crop_end_rect, x2, 0, self.width, h)
                     # Beat markers
                     self.widget_canvas.delete("beat_markers")
-                    if self.beats > 0 and self.warp:
+                    if self.beats > 0:  #  and self.warp
                         for i in range(1, self.beats):
                             x = x1 + i * (x2 - x1) // self.beats
                             self.widget_canvas.create_line(x, 0, x, h, fill=self.bmarker_color, dash=(4, 4), tags="beat_markers")

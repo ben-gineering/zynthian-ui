@@ -66,6 +66,7 @@ class zynthian_gui_selector(zynthian_gui_base):
         self.listbox_motion_last_dy = 0
         self.swiping = False
         self.last_release_ts = 0
+        self.last_tts = ""
 
         # ListBox
         self.lb_bg = zynthian_gui_config.color_panel_bg
@@ -181,6 +182,11 @@ class zynthian_gui_selector(zynthian_gui_base):
         self.set_select_path()
         return True
 
+    def show(self):
+        super().show()
+        if self.zyngui.tts and len(self.list_data) > 0:
+            self.zyngui.tts.announce(self.list_data[self.index][2], False, False, False)
+
     def show_sidebar(self, show):
         self.sidebar_shown = show
         if show:
@@ -291,12 +297,24 @@ class zynthian_gui_selector(zynthian_gui_base):
         return index
 
     def select_listbox(self, index, see=True):
-        if index < 0:
+        if index <= 0:
             index = 0
+            tts = ". Start of list"
         elif index >= len(self.list_data):
             index = len(self.list_data) - 1
-        index = self.skip_separators(index)
-        self._select_listbox(index, see=see)
+            tts = ". End of list"
+        else:
+            tts = ""
+        new_index = self.skip_separators(index)
+        no_div = new_index == index
+        self._select_listbox(new_index, see=see)
+        if self.shown and self.zyngui.tts:
+            tts_text = self.list_data[new_index][2] + tts
+            if self.last_tts == tts_text:
+                return
+            self.last_tts = tts_text
+            self.zyngui.tts.announce(tts_text, no_div, no_div, no_div)
+            self.zyngui.tts.announce(f"{self.index + 1} of {len(self.list_data)}", False, False, False)
 
     def _select_listbox(self, index, see=True):
         # Set selection
@@ -336,19 +354,27 @@ class zynthian_gui_selector(zynthian_gui_base):
                 for i in range(index, len(self.list_data)):
                     if self.list_data[i][0] is not None:
                         return i
+                    elif self.zyngui.tts:
+                        self.zyngui.tts.announce(f"Divider: {self.list_data[i][2]}")
                 # No entries down list so let's search back up
                 for i in range(index, -1, -1):
                     if self.list_data[i][0] is not None:
                         return i
+                    elif self.zyngui.tts:
+                        self.zyngui.tts.announce(f"Divider: {self.list_data[i][2]}")
             else:
                 # Request is lower than current entry so try to move up list
                 for i in range(index, -1, -1):
                     if self.list_data[i][0] is not None:
                         return i
+                    elif self.zyngui.tts:
+                        self.zyngui.tts.announce(f"Divider: {self.list_data[i][2]}")
                 # No entries up list so let's search back down
                 for i in range(index, len(self.list_data)):
                     if self.list_data[i][0] is not None:
                         return i
+                    elif self.zyngui.tts:
+                        self.zyngui.tts.announce(f"Divider: {self.list_data[i][2]}")
             return None  # No valid entries in the listbox - must all be titles
         return index
 
@@ -392,6 +418,8 @@ class zynthian_gui_selector(zynthian_gui_base):
             self.select(index)
         else:
             self.select(self.get_cursel())
+        #if self.zyngui.tts:
+        #    self.zyngui.tts._tts.beep(0.12, 900)
         self.select_action(self.index, t)
 
     # Function to handle select switch press
@@ -405,6 +433,9 @@ class zynthian_gui_selector(zynthian_gui_base):
 
     def select_action(self, index, t='S'):
         pass
+
+    def cuia_v5_zynpot_switch(self, params):
+        return False
 
     # --------------------------------------------------------------------------
     # Zynpot Callbacks (rotaries!)
@@ -507,4 +538,18 @@ class zynthian_gui_selector(zynthian_gui_base):
             elif dts >= zynthian_gui_config.zynswitch_long_seconds:
                 self.zyngui.zynswitch_defered('L', 2)
             """
+
+    def get_help_fpath(self):
+        if self.param_editor_zctrl:
+            return "parameter_editor.html"
+        return "selector.html"
+
+    # --------------------------------------------------------------------------
+    # ZynVoice TTS
+    # --------------------------------------------------------------------------
+
+    def tts_info(self):
+        super().tts_info()
+        self.zyngui.tts.announce(self.list_data[self.index][2], False, False, False)
+
 # ------------------------------------------------------------------------------

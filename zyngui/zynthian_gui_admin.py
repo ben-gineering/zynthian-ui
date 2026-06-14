@@ -108,14 +108,6 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
         self.filling_list = True
         self.list_data = []
 
-        self.list_data.append((None, 0, "> MIXER"))
-        self.list_data.append((self.visible_chains, 0, f"Visible Chains ({zynthian_gui_config.visible_mixer_strips})",
-                               ["Quantity of chains shown in mixer",
-                                None]))
-        self.list_data.append((self.visible_launchers, 0, f"Visible Launchers ({zynthian_gui_config.visible_launchers})",
-                               ["Quantity of launchers shown in mixer",
-                                None]))
-
         self.list_data.append((None, 0, "> MIDI"))
         self.list_data.append((self.zyngui.midi_in_config, 0, "MIDI Input Devices",
                                ["Configure MIDI input devices.", "midi_input.png"]))
@@ -174,6 +166,7 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
         self.list_data.append((None, 0, "> AUDIO"))
 
         self.list_data.append((self.audio_levels, 0, "Audio Levels", ["Show audio levels view.", "meters.png"]))
+        self.list_data.append((self.show_tts, 0, "ZynVoice (text to speech)", ["Show the user interface text to speech accessibility options", None]))
         if self.state_manager.allow_rbpi_headphones():
             if zynthian_gui_config.rbpi_headphones:
                 self.list_data.append((self.stop_rbpi_headphones, 0, "\u2612 RBPi Headphones",
@@ -185,7 +178,7 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
                                         "headphones.png"]))
 
         self.list_data.append((self.hotplug_audio_menu, 0, "Hotplug USB Audio",
-                               ["Configure USB audio hotplug.\n\nWhen enabled, USB audio devices will be detected and available. This does not include any device that is already configured as the main audio device which must always remain connected.",
+                               ["Configure USB audio hotplug.\n\nWhen enabled, USB audio devices will be detected and available. This does not include any device that is already configured as the main audio device which must always remain connected and not a device used for ZynVoice.",
                                 "audio_options.png"]))
 
         if zynthian_gui_config.snapshot_mixer_settings:
@@ -217,6 +210,14 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
             self.list_data.append((self.state_manager.start_vncserver, 0, "\u2610 VNC Server",
                                    ["Display of zynthian UI and processors' native GUI via VNC disabled.",
                                     "network.png"]))
+
+        self.list_data.append((None, 0, "> MIXER"))
+        self.list_data.append((self.visible_chains, 0, f"Visible Chains ({zynthian_gui_config.visible_mixer_strips})",
+                               ["Quantity of chains shown in mixer", None]))
+        self.list_data.append((self.visible_launchers, 0, f"Visible Launchers ({zynthian_gui_config.visible_launchers})",
+                               ["Quantity of launchers shown in mixer", None]))
+        self.list_data.append((self.mixer_toggle, 0, f"Toggle Control ({zynthian_gui_config.mixer_toggle})",
+                               ["The toggle control to show at top of each mixer channel", None]))
 
         self.list_data.append((None, 0, "> SETTINGS"))
         if zynthian_gui_config.preset_preload:
@@ -284,7 +285,7 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
         if zynthian_gui_config.debug_thread:
             self.list_data.append((self.exit_to_console, 0, "Exit",
                                    ["Stop zynthian UI but do not reboot.", "poweroff.png"]))
-        self.list_data.append((self.power, 0, "Power Off",
+        self.list_data.append((self.power, 0, "Power",
                                ["Turn off or reboot zynthian.\n\nPower is still fed to the device but it is effectively off.",
                                 "poweroff.png"]))
 
@@ -400,6 +401,10 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
         logging.info("Audio Levels")
         self.zyngui.show_screen("alsa_mixer")
 
+    def show_tts(self, t='S'):
+        logging.info("Text To Speech")
+        self.zyngui.show_screen("tts")
+
     def start_rbpi_headphones(self, save_config=True):
         logging.info("STARTING RBPI HEADPHONES")
         try:
@@ -444,21 +449,25 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
     def get_hotplug_menu_options(self):
         options = {}
         if zynthian_gui_config.hotplug_audio_enabled:
-            options[f"\u2612 Hotplug Audio"] = "disable_hotplug"
+            options[f"\u2612 Hotplug Audio"] = ["disable_hotplug", ["Toggle USB hotplug audio enable.", None]]
             options["Input Devices"] = None
-            for device in zynautoconnect.get_alsa_hotplug_audio_devices(False):
+            for device in zynautoconnect.get_alsa_audio_devices(False, "hotplug"):
                 if device in zynthian_gui_config.disabled_audio_in:
-                    options[f"\u2610 {device} in"] = "enable_input"
+                    options[f"\u2610 {device} in"] = ["enable_input", ["Toggle enable USB input audio device.", None]]
                 else:
-                    options[f"\u2612 {device} in"] = "disable_input"
+                    options[f"\u2612 {device} in"] = ["disable_input", ["Toggle enable USB input audio device.", None]]
             options["Output Devices"] = None
-            for device in zynautoconnect.get_alsa_hotplug_audio_devices(True):
-                if device in zynthian_gui_config.disabled_audio_out:
-                    options[f"\u2610 {device} out"] = "enable_output"
-                else:
-                    options[f"\u2612 {device} out"] = "disable_output"
+            devices = zynautoconnect.get_alsa_audio_devices(True, "hotplug")
+            if devices:
+                for device in devices:
+                    if device in zynthian_gui_config.disabled_audio_out:
+                        options[f"\u2610 {device} out"] = ["enable_output", ["Toggle enable USB audio output device.", None]]
+                    else:
+                        options[f"\u2612 {device} out"] = ["disable_output", ["Toggle enable USB audio output device.", None]]
+            else:
+                options["No available soundcard outputs - check ZynVoice"] = ["tts", ["No free audio outputs. Select to navigate to ZynVoice config.", None]]
         else:
-            options[f"\u2610 Hotplug Audio"] = "enable_hotplug"
+            options[f"\u2610 Hotplug Audio"] = ["enable_hotplug", ["Toggle USB hotplug audio enable.", None]]
         return options
 
     def hotplug_audio_menu(self):
@@ -486,6 +495,9 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
             case "disable_output":
                 self.zyngui.state_manager.start_busy("hotplug", f"Disabling {option[2:]}")
                 zynautoconnect.enable_audio_output_device(option[2:-4], False)
+            case "tts":
+                self.show_tts()
+                return
         self.zyngui.screens['option'].config("Hotplug Audio", self.get_hotplug_menu_options(), self.hotplug_audio_cb, False)
         self.zyngui.show_screen('option')
         self.zyngui.state_manager.end_busy("hotplug")
@@ -504,6 +516,11 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
         self.enable_param_editor(self, "Visible launchers",
                                  {'value_min': 4, 'value_max': 16, 'value': zynthian_gui_config.visible_launchers},
                                  self.visible_launchers_cb)
+
+    def mixer_toggle(self):
+        self.enable_param_editor(self, "Toggle Control",
+                                 {'labels': ['solo', 'mono', 'phase', 'ms', 'record'], 'value': zynthian_gui_config.mixer_toggle},
+                                 self.mixer_toggle_cb)
 
     def toggle_snapshot_mixer_settings(self):
         if zynthian_gui_config.snapshot_mixer_settings:
@@ -562,6 +579,12 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
         zynconf.save_config({"ZYNTHIAN_UI_VISIBLE_LAUNCHERS": str(value)})
         zynthian_gui_config.visible_launchers = value
         self.zyngui.screens["mixer"].update_layout()
+        self.update_list()
+
+    def mixer_toggle_cb(self, value):
+        val = self.param_editor_zctrl.value2label[str(value)]
+        zynconf.save_config({"ZYNTHIAN_UI_MIXER_TOGGLE": val})
+        zynthian_gui_config.mixer_toggle = val
         self.update_list()
 
     # -------------------------------------------------------------------------
@@ -690,7 +713,11 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
         for k, v in res.items():
             self.zyngui.add_info(" {} => {}\n".format(k, v[0]), v[1])
 
-        self.zyngui.hide_info_timer(5000)
+        if self.zyngui.tts:
+            timeout = 12000
+        else:
+            timeout = 5000
+        self.zyngui.hide_info_timer(timeout)
         self.zyngui.state_manager.end_busy("gui_admin")
 
     # ------------------------------------------------------------------------------
@@ -787,7 +814,9 @@ class zynthian_gui_admin(zynthian_gui_selector_info):
             self.state_manager.delete_last_state_snapshot()
         try:
             zynconf.save_config({"ZYNTHIAN_TOUCH_SHOWN": zynthian_gui_config.touch_shown})
-        except:
-            pass
+        except Exception as e:
+            logging.warning(f"Failed to save touch shown config: {e}")
+        if self.zyngui.tts:
+            self.zyngui.tts._tts.announce_disable = True
 
 # ------------------------------------------------------------------------------

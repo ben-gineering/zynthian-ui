@@ -62,6 +62,7 @@ struct channel_strip {
     jack_port_t* inPortB;  // Jack input port B
     jack_port_t* outPortA; // Jack output port A
     jack_port_t* outPortB; // Jack output port B
+    float gain;            // Current gain 0..10
     float level;           // Current fader level 0..1
     float reqlevel;        // Requested fader level 0..1
     float balance;         // Current balance -1..+1
@@ -303,6 +304,10 @@ static int onJackProcess(jack_nframes_t frames, void* args) {
                 fSampleA = pInA[frame];
                 fSampleB = pInB[frame];
 #endif
+                // Handle gain
+                fSampleA *= strip->gain;
+                fSampleB *= strip->gain;
+
                 // Handle channel phase reverse
                 if (strip->phase)
                     fSampleB = -fSampleB;
@@ -398,11 +403,20 @@ static int onJackProcess(jack_nframes_t frames, void* args) {
                 strip->dpmA *= g_fDpmDecay;
                 strip->dpmB *= g_fDpmDecay;
             }
-        } else if (strip->enable_dpm) {
-            strip->dpmA  = 0.0f;
-            strip->dpmB  = 0.0f;
-            strip->holdA = 0.0f;
-            strip->holdB = 0.0f;
+        } else {
+            if (strip->enable_dpm) {
+                strip->dpmA  = 0.0f;
+                strip->dpmB  = 0.0f;
+                strip->holdA = 0.0f;
+                strip->holdB = 0.0f;
+            }
+            if (strip->outRouted) {
+                // Silence channel outputs
+                pChanOutA = jack_port_get_buffer(strip->outPortA, frames);
+                pChanOutB = jack_port_get_buffer(strip->outPortB, frames);
+                memset(pChanOutA, 0.0, frames * sizeof(jack_default_audio_sample_t));
+                memset(pChanOutB, 0.0, frames * sizeof(jack_default_audio_sample_t));
+            }
         }
     }
 
@@ -612,6 +626,20 @@ void end() {
 #endif
     }
     fprintf(stderr, "zynmixer ended\n");
+}
+
+void setGain(uint8_t channel, float gain) {
+    if (channel >= MAX_CHANNELS || g_channelStrips[channel] == NULL || gain < 0.0f)
+        return;
+    g_channelStrips[channel]->gain = gain;
+    sprintf(g_oscpath, "/mixer/channel/%d/gain", channel);
+    sendOscFloat(g_oscpath, gain);
+}
+
+float getGain(uint8_t channel) {
+    if (channel >= MAX_CHANNELS || g_channelStrips[channel] == NULL)
+        return 0.0f;
+    return g_channelStrips[channel]->gain;
 }
 
 void setLevel(uint8_t channel, float level) {
@@ -833,6 +861,7 @@ void toggleMS(uint8_t channel) {
 }
 
 void reset(uint8_t channel) {
+    setGain(channel, 1.0);
     setLevel(channel, 0.8);
     setBalance(channel, 0.0);
     setMute(channel, 0);
@@ -940,6 +969,7 @@ int8_t addStrip() {
             free(strip);
             return -1;
         }
+        strip->gain       = 1.0;
         strip->level      = 0.0;
         strip->reqlevel   = 0.8;
         strip->balance    = 0.0;
@@ -1087,6 +1117,7 @@ int addOscClient(const char* client) {
         fprintf(stderr, "libzynmixer: Added OSC client %d: %s\n", i, client);
         for (int chan = 0; chan < MAX_CHANNELS; ++chan) {
             setBalance(chan, getBalance(chan));
+            setGain(chan, getGain(chan));
             setLevel(chan, getLevel(chan));
             setMono(chan, getMono(chan));
             setMute(chan, getMute(chan));

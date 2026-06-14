@@ -1193,8 +1193,8 @@ void setPattern(uint32_t id, const char* patn_state) {
     pPattern->setPlayChance(float(jPattern.value("chance", 100)) / 100);
     for (auto& jEvent: jPattern["events"]) {
         uint32_t nStep = jEvent[0];
-        float fDuration = jEvent[1];
-        float fOffset = jEvent[2];
+        float fOffset = jEvent[1];
+        float fDuration = jEvent[2];
         uint8_t nCommand = jEvent[3];
         uint8_t nValue1start = jEvent[4];
         uint8_t nValue2start = jEvent[6];
@@ -1203,11 +1203,18 @@ void setPattern(uint32_t id, const char* patn_state) {
         pEvent->setValue2end(jEvent[7]);
         pEvent->setStutterSpeed(jEvent[8]);
         pEvent->setStutterVelfx(jEvent[9]);
-        pEvent->setStutterRamp(jEvent[10]);
-        pEvent->setPlayChance(float(jEvent[11]) / 100);
-        pEvent->setPlayFreq(jEvent[12]);
-        pEvent->setStutterChance(float(jEvent[13]) / 100);
-        pEvent->setStutterFreq(jEvent[14]);
+        // Legacy format
+        if (jEvent.size() == 11) {
+            pEvent->setPlayChance(float(jEvent[10]) / 100);
+        }
+        // Extended parameters: stutter speed-ramp, play freq, stutter chance, stutter freq
+        else {
+            pEvent->setStutterRamp(jEvent[10]);
+            pEvent->setPlayChance(float(jEvent[11]) / 100);
+            pEvent->setPlayFreq(jEvent[12]);
+            pEvent->setStutterChance(float(jEvent[13]) / 100);
+            pEvent->setStutterFreq(jEvent[14]);
+        }
     }
 }
 
@@ -1561,8 +1568,10 @@ const char* convertPattern(uint32_t nPattern, const char* filename) {
                 if (checkBlock(pFile, nBlockSize, 8))
                     continue;
             }
-            jPattern["beats"] = fileRead32u(pFile);
-            jPattern["steps"] = fileRead16u(pFile);
+            uint32_t beats = fileRead32(pFile);
+            uint16_t spb = fileRead16(pFile);
+            jPattern["steps"] = beats * spb;
+            jPattern["beats"] = beats;
             jPattern["scale"] = fileRead8u(pFile);
             jPattern["tonic"] = fileRead8u(pFile);
             if (nVersion > 4) {
@@ -2242,10 +2251,10 @@ void changeVelocityAll(int value) {
     }
 }
 
-void changeVelocityList(float value, uint32_t* evi_list, uint32_t n) {
+void changeVelocityList(float value, uint32_t* ev_key_list, uint32_t n) {
     if (g_pPattern) {
         setPatternModified(g_pPattern, true, false);
-        g_pPattern->changeVelocityList(value, evi_list, n);
+        g_pPattern->changeVelocityList(value, ev_key_list, n);
         g_bDirty = true;
     }
 }
@@ -2258,10 +2267,10 @@ void changeDurationAll(float value) {
     }
 }
 
-void changeDurationList(float value, uint32_t* evi_list, uint32_t n) {
+void changeDurationList(float value, uint32_t* ev_key_list, uint32_t n) {
     if (g_pPattern) {
         setPatternModified(g_pPattern, true, false);
-        g_pPattern->changeDurationList(value, evi_list, n);
+        g_pPattern->changeDurationList(value, ev_key_list, n);
         g_bDirty = true;
     }
 }
@@ -2335,10 +2344,10 @@ uint32_t copyPatternBuffer(uint32_t pattern, uint32_t step1, uint32_t step2, uin
     return 0;
 }
 
-uint32_t getPatternSelectionIndexes(uint32_t pattern, uint32_t* ev_indexes, uint32_t limit, uint32_t step1, uint32_t step2, uint8_t note1, uint8_t note2) {
+uint32_t getPatternSelectionKeys(uint32_t pattern, uint32_t* ev_keys, uint32_t limit, uint32_t step1, uint32_t step2, uint8_t note1, uint8_t note2) {
     Pattern* pPattern = g_seqMan.getPattern(pattern);
     if (pPattern) {
-        return pPattern->getPatternSelectionIndexes(ev_indexes, limit, step1, step2, note1, note2);
+        return pPattern->getPatternSelectionKeys(ev_keys, limit, step1, step2, note1, note2);
     }
     return 0;
 }

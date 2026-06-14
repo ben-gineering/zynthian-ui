@@ -4,7 +4,7 @@
 #
 # zynthian_engine implementation for Jalv Plugin Host
 #
-# Copyright (C) 2015-2024 Fernando Moyano <jofemodo@zynthian.org>
+# Copyright (C) 2015-2026 Fernando Moyano <jofemodo@zynthian.org>
 #
 # ******************************************************************************
 #
@@ -40,7 +40,6 @@ from zyncoder.zyncore import lib_zyncore
 import zyngine.zynthian_lv2 as zynthian_lv2
 from zyngine.zynthian_engine import zynthian_engine
 from zyngine.zynthian_controller import zynthian_controller
-from zyngine.zynthian_signal_manager import zynsigman
 from zyngine.ctrlinfo import *
 
 # ------------------------------------------------------------------------------
@@ -200,7 +199,7 @@ class zynthian_engine_jalv(zynthian_engine):
         self.save_preset_uri = None
 
         if state_manager:
-            self.eng_info = self.state_manager.chain_manager.engine_info[eng_code]
+            self.eng_info = self.chain_manager.engine_info[eng_code]
         else:
             self.eng_info = zynthian_lv2.get_engines()[eng_code]
 
@@ -209,6 +208,8 @@ class zynthian_engine_jalv(zynthian_engine):
         self.nickname = eng_code
         self.plugin_name = self.eng_info["NAME"]
         self.plugin_url = self.eng_info['URL']
+
+        self.bypass_zctrl = None
 
         # WARNING Show all controllers for Gareus Meters, as they seem to be wrongly marked with property "not_on_gui"
         if self.plugin_url.startswith("http://gareus.org/oss/lv2/meters"):
@@ -227,7 +228,7 @@ class zynthian_engine_jalv(zynthian_engine):
             if jackname:
                 self.jackname = jackname
             else:
-                self.jackname = self.state_manager.chain_manager.get_next_jackname(self.plugin_name)
+                self.jackname = self.chain_manager.get_next_jackname(self.plugin_name)
 
             logging.debug("CREATING JALV ENGINE => {}".format(self.jackname))
 
@@ -479,7 +480,8 @@ class zynthian_engine_jalv(zynthian_engine):
     def proc_parse_preset(self, line):
         parts = line.split(" ", maxsplit=1)
         if len(parts) == 2 and parts[1][0] == "(" and parts[1][-1] == ")":
-            self.add_preset(parts[0], parts[1][1:-1])
+            #self.add_preset(parts[0], parts[1][1:-1])
+            self.chain_manager.reload_engine_preset_info(self.nickname)
             self.save_preset_uri = parts[0]
         else:
             logging.warning(f"Wrong preset format when parsing jalv output => {line}")
@@ -569,12 +571,12 @@ class zynthian_engine_jalv(zynthian_engine):
                 logging.error(e)
 
             # Update cache
-            try:
-                self.preset_info[new_bank_name] = self.preset_info.pop(bank[2])
-                zynthian_lv2.save_plugin_presets_cache(
-                    self.plugin_name, self.preset_info)
-            except Exception as e:
-                logging.error(e)
+            self.chain_manager.reload_engine_preset_info(self.nickname)
+            #try:
+            #    self.preset_info[new_bank_name] = self.preset_info.pop(bank[2])
+            #    zynthian_lv2.save_plugin_presets_cache(self.plugin_name, self.preset_info)
+            #except Exception as e:
+            #    logging.error(e)
 
     def remove_user_bank(self, bank):
         if self.is_preset_user(bank):
@@ -584,21 +586,21 @@ class zynthian_engine_jalv(zynthian_engine):
                 logging.error(e)
 
             # Update cache
-            if bank[2] in self.preset_info:
-                try:
-                    self.preset_info.pop(bank[2])
-                    zynthian_lv2.save_plugin_presets_cache(
-                        self.plugin_name, self.preset_info)
-                except Exception as e:
-                    logging.error(e)
+            self.chain_manager.reload_engine_preset_info(self.nickname)
+            #if bank[2] in self.preset_info:
+            #    try:
+            #        self.preset_info.pop(bank[2])
+            #        zynthian_lv2.save_plugin_presets_cache(self.plugin_name, self.preset_info)
+            #    except Exception as e:
+            #        logging.error(e)
 
     def delete_user_bank(self, bank):
         if self.is_preset_user(bank):
             try:
                 for preset in list(self.preset_info[bank[2]]['presets']):
-                    self.delete_preset(bank, preset['url'])
+                    self.delete_preset(bank, preset['url'], refresh_cache=False)
                 self.remove_user_bank(bank)
-                # TODO: self.zyngui.curprocessor.load_preset_list()
+                # TODO: self.processors[0].load_preset_list()
             except Exception as e:
                 logging.error(e)
 
@@ -669,8 +671,10 @@ class zynthian_engine_jalv(zynthian_engine):
             i += 1
         return self.save_preset_uri
 
+    # Currently not used
     def add_preset(self, preset_uri, preset_name):
         logging.info(f"Add preset '{preset_name}' => {preset_uri}")
+        # TODO: Re-order cache after adding!
         # Add to cache
         try:
             # Add bank if needed
@@ -692,17 +696,19 @@ class zynthian_engine_jalv(zynthian_engine):
             logging.error(e)
         return False
 
-    def delete_preset(self, bank, preset):
+    def delete_preset(self, bank, preset, refresh_cache=True):
         if self.is_preset_user(preset):
             try:
                 # Remove from LV2 ttl
                 zynthian_engine_jalv.lv2_remove_preset(preset[0])
                 # Remove from  cache
-                for i, p in enumerate(self.preset_info[bank[2]]['presets']):
-                    if p['url'] == preset[0]:
-                        del self.preset_info[bank[2]]['presets'][i]
-                        zynthian_lv2.save_plugin_presets_cache(self.plugin_name, self.preset_info)
-                        break
+                if refresh_cache:
+                    self.chain_manager.reload_engine_preset_info(self.nickname)
+                    #for i, p in enumerate(self.preset_info[bank[2]]['presets']):
+                    #    if p['url'] == preset[0]:
+                    #        del self.preset_info[bank[2]]['presets'][i]
+                    #        zynthian_lv2.save_plugin_presets_cache(self.plugin_name, self.preset_info)
+                    #        break
             except Exception as e:
                 logging.error(e)
 
@@ -723,11 +729,12 @@ class zynthian_engine_jalv(zynthian_engine):
                 # Update LV2 ttl
                 zynthian_engine_jalv.lv2_rename_preset(preset[0], new_preset_name)
                 # Update cache
-                for i, p in enumerate(self.preset_info[bank[2]]['presets']):
-                    if p['url'] == preset[0]:
-                        self.preset_info[bank[2]]['presets'][i]['label'] = new_preset_name
-                        zynthian_lv2.save_plugin_presets_cache(self.plugin_name, self.preset_info)
-                        break
+                self.chain_manager.reload_engine_preset_info(self.nickname)
+                #for i, p in enumerate(self.preset_info[bank[2]]['presets']):
+                #    if p['url'] == preset[0]:
+                #        self.preset_info[bank[2]]['presets'][i]['label'] = new_preset_name
+                #        zynthian_lv2.save_plugin_presets_cache(self.plugin_name, self.preset_info)
+                #        break
             except Exception as e:
                 logging.error(e)
 
@@ -738,6 +745,7 @@ class zynthian_engine_jalv(zynthian_engine):
     def get_lv2_controllers_dict(self):
         logging.info("Getting Controller List from LV2 Plugin ...")
         zctrls = {}
+        self.bypass_zctrl = None
         for i, info in zynthian_lv2.get_plugin_ports(self.plugin_url).items():
             symbol = info['symbol']
 
@@ -755,6 +763,15 @@ class zynthian_engine_jalv(zynthian_engine):
             #logging.debug(f"Controller {symbol} group => {info['group_symbol']}")
 
             try:
+                # Detect native bypass/enable toggle => TODO Detect LV2 designation!!
+                if self.type == "Audio Effect" and symbol.lower() in ("bypass", "enable"):
+                    info['is_bypass'] = True
+                    # Deduce bypass logic?? => Seems to be not needed!!
+                    info['bypass_value'] = 0
+                else:
+                    info['is_bypass'] = False
+                    info['bypass_value'] = 0
+
                 display_priority = info['display_priority']
                 if info['group_display_priority'] > 0:
                     display_priority += 1000000 * info['group_display_priority']
@@ -784,6 +801,8 @@ class zynthian_engine_jalv(zynthian_engine):
                         'is_trigger': info['is_trigger'],
                         'is_integer': info['is_integer'],
                         'is_logarithmic': False,
+                        'is_bypass': info['is_bypass'],
+                        'bypass_value': info['bypass_value'],
                         'is_path': False,
                         'path_file_types': None,
                         'not_on_gui': info['not_on_gui'],
@@ -812,6 +831,8 @@ class zynthian_engine_jalv(zynthian_engine):
                             'is_trigger': False,
                             'is_integer': True,
                             'is_logarithmic': False,
+                            'is_bypass': info['is_bypass'],
+                            'bypass_value': info['bypass_value'],
                             'is_path': False,
                             'path_file_types': None,
                             'not_on_gui': info['not_on_gui'],
@@ -831,6 +852,8 @@ class zynthian_engine_jalv(zynthian_engine):
                             'is_trigger': False,
                             'is_integer': True,
                             'is_logarithmic': info['is_logarithmic'],
+                            'is_bypass': info['is_bypass'],
+                            'bypass_value': info['bypass_value'],
                             'is_path': False,
                             'path_file_types': None,
                             'not_on_gui': info['not_on_gui'],
@@ -856,6 +879,8 @@ class zynthian_engine_jalv(zynthian_engine):
                         'is_trigger': False,
                         'is_integer': False,
                         'is_logarithmic': False,
+                        'is_bypass': info['is_bypass'],
+                        'bypass_value': info['bypass_value'],
                         'is_path': False,
                         'path_file_types': None,
                         'not_on_gui': info['not_on_gui'],
@@ -916,6 +941,8 @@ class zynthian_engine_jalv(zynthian_engine):
                         'is_trigger': False,
                         'is_integer': False,
                         'is_logarithmic': info['is_logarithmic'],
+                        'is_bypass': info['is_bypass'],
+                        'bypass_value': info['bypass_value'],
                         'is_path': False,
                         'path_file_types': None,
                         'not_on_gui': info['not_on_gui'],
@@ -924,32 +951,36 @@ class zynthian_engine_jalv(zynthian_engine):
                         'filter': info['filter']
                     })
 
+                if info['is_bypass']:
+                    self.bypass_zctrl = zctrls[symbol]
+
             # If control info is not OK
             except Exception as e:
                 #logging.error(e)
                 logging.exception(traceback.format_exc())
 
-        if self.type == "Audio Effect":
-            if "bypass" in zctrls:
-                zctrls["bypass"].labels = ["inline", "bypass"]
-                zctrls["bypass"].is_toggle = True
-                zctrls["bypass"].display_priority = 0
-            elif "BYPASS" in zctrls:
-                zctrls["BYPASS"].labels = ["inline", "bypass"]
-                zctrls["BYPASS"].is_toggle = True
-                zctrls["BYPASS"].display_priority = 0
-            else:
-                # Add jack-routing bypass control
-                zctrls["bypass"] = zynthian_controller(self, 'bypass', {
-                    'name': "bypass",
-                    'is_toggle': True,
-                    'value_max': 1,
-                    'value_default': 0,
-                    'value': 0,
-                    'processor': self,
-                    'labels': ['inline', 'bypass'],
-                    "display_priority": 0
-                })
+        # Setup zynthian bypass toggle
+        if self.bypass_zctrl:
+            # Reconfigure bypass zctrl to unify behaviour
+            self.bypass_zctrl.set_options({"short_name": "bypass",
+                                      "labels": ["inline", "bypass"],
+                                      "ticks": [int(not self.bypass_zctrl.bypass_value), self.bypass_zctrl.bypass_value],
+                                      "display_priority": 0})
+        elif self.type == "Audio Effect":
+            # Add jack-routing bypass zctrl
+            self.bypass_zctrl = zctrls["bypass"] = zynthian_controller(self, 'bypass', {
+                'name': "bypass",
+                'is_toggle': True,
+                'is_bypass': True,
+                'bypass_value': 1,
+                'value_max': 1,
+                'value_default': 0,
+                'value': 0,
+                'processor': self,
+                'labels': ['inline', 'bypass'],
+                'ticks': [0, 1],
+                "display_priority": 0
+            })
 
         return zctrls
 
@@ -978,18 +1009,26 @@ class zynthian_engine_jalv(zynthian_engine):
                 logging.error(f"Can't send controller '{zctrl.symbol}' with CC{zctrl.midi_cc} to zmop {zctrl.processor.chain.zmop_index} => {e}")
         elif zctrl.graph_path is not None:
             if zctrl.is_path:
-                #logging.debug("set %d %s" % (zctrl.graph_path, zctrl.value))
-                self.proc_cmd("set %d %s" % (zctrl.graph_path, zctrl.value))
+                if zctrl.value:
+                    val = zctrl.value
+                else:
+                    # Some engines (Ratatouille, Neuralrack) doesn't reset the path property when sending the null string
+                    val = '_'
+                #logging.debug(f"set {zctrl.graph_path} {val}")
+                self.proc_cmd(f"set {zctrl.graph_path} {val}")
             else:
                 self.proc_cmd("set %d %.6f" % (zctrl.graph_path, zctrl.value))
         else:
             if zctrl.is_path:
-                #logging.debug("%s=%s" % (zctrl.symbol, zctrl.value))
-                self.proc_cmd("%s=%s" % (zctrl.symbol, zctrl.value))
+                if zctrl.value:
+                    val = zctrl.value
+                else:
+                    # Some engines (Ratatouille, Neuralrack) doesn't reset the path property when sending the null string
+                    val = '_'
+                #logging.debug(f"{zctrl.symbol}={val}")
+                self.proc_cmd(f"{zctrl.symbol}={val}")
             else:
                 self.proc_cmd("%s=%.6f" % (zctrl.symbol, zctrl.value))
-        if zctrl.symbol == "bypass":
-            zynsigman.send_queued(zynsigman.S_PROCESSOR, zynsigman.SS_PROCESSOR_BYPASS, zctrl=zctrl)
 
     # ---------------------------------------------------------------------------
     # API methods

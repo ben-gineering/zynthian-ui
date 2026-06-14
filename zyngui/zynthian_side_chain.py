@@ -28,7 +28,6 @@ import logging
 import tkinter
 from tkinter import font
 
-import zynautoconnect
 from zyngui import zynthian_gui_config
 from zyngine.zynthian_signal_manager import zynsigman
 
@@ -90,7 +89,7 @@ class zynthian_side_chain(tkinter.Canvas):
 
         self.update_layout()
 
-    def set_chain(self, chain_id=None):
+    def set_chain(self, chain_id=None, proc=None):
         try:
             self.chain = self.chain_manager.chains[chain_id]
             self.chain_id = chain_id
@@ -99,12 +98,13 @@ class zynthian_side_chain(tkinter.Canvas):
             self.chain = self.chain_manager.chains[chain_id]
 
         # Save current selection across node graph rebuild => proc string
-        try:
-            proc = self.nodes[self.selected_index]["proc"]
-            if type(proc) != str:
-                proc = None
-        except:
-            proc = None
+        if proc is None:
+            try:
+                proc = self.nodes[self.selected_index]["proc"]
+                if type(proc) != str:
+                    proc = None
+            except:
+                pass
 
         self.selected_index = None
         self.build_graph()
@@ -119,6 +119,8 @@ class zynthian_side_chain(tkinter.Canvas):
         self.font = (zynthian_gui_config.font_family, int(0.026 * self.height))
         self.BLOCK_WIDTH =  2 * int(0.45 * self.width)
         self.BLOCK_HEIGHT = int(0.12 * self.height)
+        self.BLOCK_TEXT_WIDTH = int(0.9 * self.BLOCK_WIDTH)
+        self.BLOCK_TEXT_HEIGHT = int(0.9 * self.BLOCK_HEIGHT)
         self.H_SPACING = self.width - self.BLOCK_WIDTH
         self.V_SPACING = 2 * (self.BLOCK_HEIGHT // 10)
         self._draw_graph()
@@ -147,10 +149,12 @@ class zynthian_side_chain(tkinter.Canvas):
         #self.hide()
 
     def bypass_cb(self, zctrl):
-        processor = zctrl.processor
-        col = "#808080" if zctrl.value else "#ffffff"
+        if zctrl.processor.is_bypassed():
+            col = "#b0b0b0"
+        else:
+            col = "#ffffff"
         for proc, node in self.bypass2node.items():
-            if proc == processor:
+            if proc == zctrl.processor:
                 self.itemconfigure(node["text_id"], fill=col)
                 break
 
@@ -178,28 +182,65 @@ class zynthian_side_chain(tkinter.Canvas):
             "slot": slot,       # Processor slot
             "idx": idx,         # Index of (parallel) processor within slot
             "row": row,         # Position of node within graph
-            "is_dst": proc_type in ("MIDI Synth", "Audio Effect", "MIDI Tool", "Special", "midi_output", "audio_out"),
-            "is_src": proc_type in ("MIDI Synth", "Audio Effect", "MIDI Tool", "Special", "Audio Generator", "midi_input", "audio_in")
+            "is_dst": proc_type in ("chain_controllers", "MIDI Synth", "Audio Effect", "MIDI Tool", "Special", "midi_output", "audio_out"),
+            "is_src": proc_type in ("chain_controllers", "MIDI Synth", "Audio Effect", "MIDI Tool", "Special", "Audio Generator", "midi_input", "audio_in")
         })
 
-    def _get_name(self, text, max_width):
-        """
-        Trim text so that its pixel width fits within max_width.
-        Adds an ellipsis (…) if trimmed.
-        """
-        node_font = font.Font(family=self.font[0], size=self.font[1])
-        if node_font.measure(text) <= max_width:
-            return text  # already fits
+    def fit_text_to_box(self, text, min_font_size=6):
+        """ Ensure wrapped text fits inside a rectangle.
 
-        ellipsis = "…"
-        ellipsis_width = node_font.measure(ellipsis)
+        Rules:
+        - Keep the original font size if at least one line fits horizontally.
+        - If even a single line cannot fit, reduce the font size until it can.
+        - Truncate text from the end and append "..." until the wrapped
+        text fits within the rectangle height.
 
-        # Start trimming from the end
-        for i in range(len(text), 0, -1):
-            sub = text[:i]
-            if node_font.measure(sub) + ellipsis_width <= max_width:
-                return sub.strip() + ellipsis
-        return ellipsis  # fallbackpass
+        Returns:
+            (final_text, final_font_size)
+        """
+
+        size = self.font[1]
+        while size >= min_font_size:
+            f = font.Font(family=self.font[0], size=size)
+            line_height = f.metrics("linespace")
+            single_line_width = f.measure("W")
+            width_ok = single_line_width <= self.BLOCK_TEXT_WIDTH
+            height_ok = line_height <= self.BLOCK_TEXT_HEIGHT
+            if width_ok and height_ok:
+                break
+            size -= 1
+        size = max(size, min_font_size)
+        f = font.Font(family=self.font[0], size=size)
+
+        def wrapped_height(s):
+            words = s.split()
+            if not words:
+                return f.metrics("linespace")
+            lines = []
+            current = words[0]
+            for word in words[1:]:
+                trial = current + " " + word
+                if f.measure(trial) <= self.BLOCK_TEXT_WIDTH:
+                    current = trial
+                else:
+                    lines.append(current)
+                    current = word
+            lines.append(current)
+            line_height = f.metrics("linespace")
+            return len(lines) * line_height
+
+        fitted = text
+        while fitted:
+            h = wrapped_height(fitted)
+            if h <= self.BLOCK_TEXT_HEIGHT:
+                break
+            fitted = fitted[:-1].rstrip()
+            if len(fitted) > 3:
+                fitted = fitted[:-3].rstrip() + "..."
+            else:
+                fitted = "..."
+        return fitted, size
+
 
     def build_graph(self, proc=None):
         """
@@ -219,9 +260,8 @@ class zynthian_side_chain(tkinter.Canvas):
         if self.chain:
             # Add chain option button
             title = "Chain Options"
-            #name = self._get_name(self.chain.get_name(), self.BLOCK_WIDTH)
             if self.chain.title:
-                title += "\n" + self._get_name(self.chain.title, self.BLOCK_WIDTH)
+                title += "\n" + self.chain.title
             self._add_node(title, "chain_options")
             # Add MIDI input
             if self.chain.is_midi():
@@ -230,6 +270,9 @@ class zynthian_side_chain(tkinter.Canvas):
                 else:
                     midi_chan = f"CH#ALL"
                 self._add_node(f"MIDI Input\n{midi_chan}", "midi_input")
+            # Add Chain Controllers block
+            if self.chain.zctrls:
+                self._add_node(f"Chain\nControllers", "chain_controllers")
             # Add MIDI processors
             for slot_idx, slot in enumerate(self.chain.midi_slots):
                 for proc_idx, processor in enumerate(slot):
@@ -266,20 +309,21 @@ class zynthian_side_chain(tkinter.Canvas):
         c_synth = "#32a893"
         c_audio = "#505080"
         c_special = "#708050"
-
-        # Draw node background
-        proc = node.get("proc")
         bg_col = "#505050"
         fg_col = "#ffffff"
+
+        # Draw node background
+        title = node.get("title")
+        proc = node.get("proc")
         try:
-            disabled = proc.controllers_dict['bypass'].value
+            # Disable block depending bypass status
+            disabled = proc.is_bypassed()
             self.bypass2node[proc] = node
         except:
-            disabled = 0
-        title = node.get("title")
+            disabled = False
         if type(proc) is str:
             match proc:
-                case "midi_input" | "midi_output":
+                case "midi_input" | "midi_output" | "chain_controllers":
                     bg_col = c_midi
                 case "audio_in" | "audio_out":
                     bg_col = c_audio
@@ -293,31 +337,21 @@ class zynthian_side_chain(tkinter.Canvas):
                     bg_col = c_audio
                 case "Special":
                     bg_col = c_special
-            if proc.type == "Audio Effect":
-                try:
-                    if proc.controllers_dict["bypass"].value:
-                        disabled = True
-                        fg_col = "#808080"
-                except:
-                    pass
+            if disabled:
+                fg_col = "#b0b0b0"
         node["id"] = self.create_rectangle(
             x, y, x + self.BLOCK_WIDTH, y + self.BLOCK_HEIGHT,
             fill=bg_col, outline=bg_col, tags="node"
         )
+        title, size = self.fit_text_to_box(title)
         # Draw node text
         node["text_id"] = self.create_text(
             x + self.BLOCK_WIDTH / 2, y + self.BLOCK_HEIGHT / 2,
             text=title, fill=fg_col,
-            font=self.font,
-            width=self.BLOCK_WIDTH,
+            font=(self.font[0],size),
+            width=self.BLOCK_TEXT_WIDTH,
             justify=tkinter.CENTER
         )
-        while True:
-            x0, y0, x1, y1 = self.bbox(node["text_id"])
-            if y1 - y0 < self.BLOCK_HEIGHT:
-                break
-            title = title[:-1].strip()
-            self.itemconfig(node["text_id"], text=f"{title}...")
         self.node2pos[node["id"]] = node
 
     def _draw_graph(self, sel_proc=None):
@@ -339,7 +373,7 @@ class zynthian_side_chain(tkinter.Canvas):
                 proc_next = None
             # Create interconnect lines
             y += self.BLOCK_HEIGHT
-            if type(proc) != str and type(proc_next) != str and proc.type == proc_next.type and node["slot"] == node_next["slot"]:
+            if node_next and type(proc) != str and type(proc_next) != str and proc.type == proc_next.type and node["slot"] == node_next["slot"]:
                 x0 = x + self.BLOCK_WIDTH // 8
                 self.create_line(x0, y, x0, y + self.V_SPACING, fill="#AAAAAA", width=4, tags="lines")
                 x0 = x + 7 * self.BLOCK_WIDTH // 8
@@ -476,6 +510,12 @@ class zynthian_side_chain(tkinter.Canvas):
 
     def select_current_processor(self, action=False):
         self.select_node(proc=self.chain.current_processor, action=action)
+
+    def select_processor(self, proc, action=False):
+        if not proc and self.chain.zctrls:
+            self.select_node(proc="chain_controllers", action=action)
+        elif proc:
+            self.select_node(proc=proc, action=action)
 
     def start_moving_processor(self, processor=None):
         """
@@ -713,6 +753,7 @@ class zynthian_side_chain(tkinter.Canvas):
             proc = self.moving_proc
             self.chain_manager.nudge_processor(self.chain_manager.active_chain.chain_id, proc, False)
             self.build_graph(proc)
+            self.chain_control.refresh_subscreen()
         else:
             row = self.selected_index + 1
             if row < len(self.nodes):
@@ -729,6 +770,7 @@ class zynthian_side_chain(tkinter.Canvas):
             proc = self.moving_proc
             self.chain_manager.nudge_processor(self.chain_manager.active_chain.chain_id, proc, True)
             self.build_graph(proc)
+            self.chain_control.refresh_subscreen()
         else:
             row = self.selected_index - 1
             if row >= 0:

@@ -5,7 +5,7 @@
 #
 # Zynthian Control Device Manager Class
 #
-# Copyright (C) 2015-2025 Fernando Moyano <jofemodo@zynthian.org>
+# Copyright (C) 2015-2026 Fernando Moyano <jofemodo@zynthian.org>
 #                         Brian Walton <brian@riban.co.uk>
 #                         Oscar Acena <oscaracena@gmail.com>
 #
@@ -36,7 +36,6 @@ mp.set_start_method('fork')
 import zynautoconnect
 from zyncoder.zyncore import lib_zyncore
 from zyngine.zynthian_signal_manager import zynsigman
-from zynlibs.zynmixer.zynmixer import SS_ZYNMIXER_SET_VALUE
 from zynlibs.zynseq import zynseq
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -135,29 +134,30 @@ class zynthian_ctrldev_base:
         self.refresh()
 
         # Register for chain add/remove
-        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_ADD_CHAIN, self.refresh)
-        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_REMOVE_CHAIN, self.refresh)
-        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_REMOVE_ALL_CHAINS, self.refresh)
-        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_MOVE_CHAIN, self.refresh)
+        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, zynsigman.SS_REMOVE_CHAIN, self.refresh)
+        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, zynsigman.SS_ADD_CHAIN, self.refresh)
+        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, zynsigman.SS_REMOVE_ALL_CHAINS, self.refresh)
+        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, zynsigman.SS_MOVE_CHAIN, self.refresh)
         # Register for snapshot loading
-        zynsigman.register_queued(zynsigman.S_STATE_MAN, self.state_manager.SS_LOAD_SNAPSHOT, self.refresh)
+        zynsigman.register_queued(zynsigman.S_STATE_MAN, zynsigman.SS_LOAD_SNAPSHOT, self.refresh)
         # Register for GUI changes
-        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_SET_ACTIVE_CHAIN, self.on_active_chain)
+        zynsigman.register_queued(zynsigman.S_CHAIN_MAN, zynsigman.SS_SET_ACTIVE_CHAIN, self.on_active_chain)
         zynsigman.register_queued(zynsigman.S_GUI, zynsigman.SS_GUI_VIEW_POS, self.on_gui_view_pos)
+        zynsigman.register_queued(zynsigman.S_GUI, zynsigman.SS_GUI_TOGGLE_ALT_MODE, self.on_alt_mode)
 
     def end(self):
         """End control device: restore initial state, unregister signals, etc
         It *SHOULD* be implemented by child class"""
 
         # Unregister from snapshot loading
-        zynsigman.unregister(zynsigman.S_STATE_MAN, self.state_manager.SS_LOAD_SNAPSHOT, self.refresh)
+        zynsigman.unregister(zynsigman.S_STATE_MAN, zynsigman.SS_LOAD_SNAPSHOT, self.refresh)
         # Unregister from processor tree changes
-        zynsigman.unregister(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_ADD_CHAIN, self.refresh)
-        zynsigman.unregister(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_REMOVE_CHAIN, self.refresh)
-        zynsigman.unregister(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_REMOVE_ALL_CHAINS, self.refresh)
-        zynsigman.unregister(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_MOVE_CHAIN, self.refresh)
+        zynsigman.unregister(zynsigman.S_CHAIN_MAN, zynsigman.SS_ADD_CHAIN, self.refresh)
+        zynsigman.unregister(zynsigman.S_CHAIN_MAN, zynsigman.SS_REMOVE_CHAIN, self.refresh)
+        zynsigman.unregister(zynsigman.S_CHAIN_MAN, zynsigman.SS_REMOVE_ALL_CHAINS, self.refresh)
+        zynsigman.unregister(zynsigman.S_CHAIN_MAN, zynsigman.SS_MOVE_CHAIN, self.refresh)
         # Unregister from GUI changes
-        zynsigman.unregister(zynsigman.S_CHAIN_MAN, self.chain_manager.SS_SET_ACTIVE_CHAIN, self.on_active_chain)
+        zynsigman.unregister(zynsigman.S_CHAIN_MAN, zynsigman.SS_SET_ACTIVE_CHAIN, self.on_active_chain)
         zynsigman.unregister(zynsigman.S_GUI, zynsigman.SS_GUI_VIEW_POS, self.on_gui_view_pos)
 
         self.end_midiproc()
@@ -357,6 +357,11 @@ class zynthian_ctrldev_base:
                 return
             self.refresh()
 
+    def on_alt_mode(self, alt_mode: bool):
+        """Handle change of alt mode
+        *COULD* be implemented by child class"""
+        pass
+
     def on_gui_view_pos(self, left_chain=None, top_phrase=None):
         """Update GUI scroll position
         *COULD* be implemented by child class"""
@@ -391,17 +396,17 @@ class zynthian_ctrldev_zynpad(zynthian_ctrldev_base):
     def init(self):
         super().init()
         # Register for zynseq updates
-        zynsigman.register_queued(zynsigman.S_STEPSEQ, zynseq.SS_SEQ_PLAY_STATE, self.update_seq_state)
-        zynsigman.register_queued(zynsigman.S_STEPSEQ, zynseq.SS_SEQ_STATE, self.refresh)
+        zynsigman.register_queued(zynsigman.S_STEPSEQ, zynsigman.SS_SEQ_PLAY_STATE, self.update_seq_state)
+        zynsigman.register_queued(zynsigman.S_STEPSEQ, zynsigman.SS_SEQ_STATE, self.refresh)
         # Register phrase change
-        zynsigman.register_queued(zynsigman.S_STEPSEQ, zynseq.SS_SEQ_SELECT_PHRASE, self.on_active_phrase)
+        zynsigman.register_queued(zynsigman.S_STEPSEQ, zynsigman.SS_SEQ_SELECT_PHRASE, self.on_active_phrase)
 
     def end(self):
         # Unregister from zynseq updates
-        zynsigman.unregister(zynsigman.S_STEPSEQ, zynseq.SS_SEQ_PLAY_STATE, self.update_seq_state)
-        zynsigman.unregister(zynsigman.S_STEPSEQ, zynseq.SS_SEQ_STATE, self.refresh)
+        zynsigman.unregister(zynsigman.S_STEPSEQ, zynsigman.SS_SEQ_PLAY_STATE, self.update_seq_state)
+        zynsigman.unregister(zynsigman.S_STEPSEQ, zynsigman.SS_SEQ_STATE, self.refresh)
         # Unregister phrase change
-        zynsigman.unregister(zynsigman.S_STEPSEQ, zynseq.SS_SEQ_SELECT_PHRASE, self.on_active_phrase)
+        zynsigman.unregister(zynsigman.S_STEPSEQ, zynsigman.SS_SEQ_SELECT_PHRASE, self.on_active_phrase)
         # Light off
         self.light_off()
         super().end()
@@ -523,11 +528,11 @@ class zynthian_ctrldev_zynmixer(zynthian_ctrldev_base):
     def init(self):
         super().init()
         # Register for audio mixer changes
-        zynsigman.register_queued(zynsigman.S_MIXER, SS_ZYNMIXER_SET_VALUE, self.update_mixer_strip)
+        zynsigman.register_queued(zynsigman.S_MIXER, zynsigman.SS_ZYNMIXER_SET_VALUE, self.update_mixer_strip)
 
     def end(self):
         # Unregister for audio mixer changes
-        zynsigman.unregister(zynsigman.S_MIXER, SS_ZYNMIXER_SET_VALUE, self.update_mixer_strip)
+        zynsigman.unregister(zynsigman.S_MIXER, zynsigman.SS_ZYNMIXER_SET_VALUE, self.update_mixer_strip)
         self.light_off()
         super().end()
 
