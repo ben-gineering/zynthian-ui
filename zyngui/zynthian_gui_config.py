@@ -602,6 +602,7 @@ visible_launchers = get_env_int('ZYNTHIAN_UI_VISIBLE_LAUNCHERS', 8)
 ctrl_graph = get_env_int('ZYNTHIAN_UI_CTRL_GRAPH', 1)
 control_test_enabled = get_env_int('ZYNTHIAN_UI_CONTROL_TEST_ENABLED', 0)
 power_save_secs = 60 * get_env_int('ZYNTHIAN_UI_POWER_SAVE_MINUTES', 60)
+audio_power_threshold = get_env_int('ZYNTHIAN_UI_AUDIO_POWER_THRESHOLD', -40)
 preset_preload = get_env_int('ZYNTHIAN_UI_PRESET_PRELOAD', 1)
 mixer_toggle = os.environ.get('ZYNTHIAN_UI_MIXER_TOGGLE', "record")
 
@@ -919,7 +920,7 @@ if "zynthian_main.py" in sys.argv[0]:
         fh2 = int(fh * fw2 / fw)
         nframes = 0
         while pil_frame:
-            pil_frame2 = pil_frame.resize((fw2, fh2), Image.ANTIALIAS)
+            pil_frame2 = pil_frame.resize((fw2, fh2), Image.LANCZOS)
             # convert PIL image object to Tkinter PhotoImage object
             loading_imgs.append(ImageTk.PhotoImage(pil_frame2))
             nframes += 1

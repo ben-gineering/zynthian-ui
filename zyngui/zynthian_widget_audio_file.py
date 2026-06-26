@@ -33,6 +33,7 @@ from threading import Thread
 from os.path import basename
 
 # Zynthian specific modules
+from zynlibs.zynseq import zynseq
 from zyngine.zynthian_signal_manager import zynsigman
 from zyngui import zynthian_gui_config
 from zyngui import zynthian_widget_base
@@ -62,6 +63,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
 
         self.refreshing = False # Flag to avoid multiple threads refreshing waveform
         self.refresh_waveform = False  # True to force redraw of waveform on next refresh
+        self.update_markers = False  # True to force update markers on next refresh
         self.waveform_height = 1  # ratio of height for y offset of zoom overview display
         self.offset = 0  # Frames from start of file that waveform display starts
         self.auto_offset = 0 # 1 to calc offset from crop_start. 2 to calc offest from crop_end.
@@ -78,7 +80,8 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
         self.waveform_color = zynthian_gui_config.color_info
         self.playcur_color = zynthian_gui_config.color_on
         self.bg_crop_color = zynthian_gui_config.color_variant(zynthian_gui_config.color_panel_bg, 30)
-        self.bmarker_color = zynthian_gui_config.color_hl
+        #self.bmarker_color = zynthian_gui_config.color_hl
+        self.bmarker_color = zynthian_gui_config.color_tx
         self.font_info = tkinter.font.Font(font=("DejaVu Sans Mono", int(1.0 * zynthian_gui_config.font_size)))
 
         self.widget_canvas = tkinter.Canvas(self,
@@ -201,8 +204,8 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
     def load_file(self):
         # Run as background thread
         if self.fpath:
+            self.refreshing = True
             try:
-                self.refreshing = True
                 self.widget_canvas.delete("waveform")
                 self.widget_canvas.itemconfig("overlay", state=tkinter.HIDDEN)
                 self.sf = soundfile.SoundFile(self.fpath)
@@ -225,8 +228,11 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
                     self.widget_canvas.create_line(0, 0, 0, 0, fill=self.waveform_color, tags=("waveform", f"waveform{chan}"), state=tkinter.HIDDEN)
                 self.offset = 0
                 self.auto_offset = 0
-                self.crop_start = 0
-                self.crop_end = self.frames
+                if self.clip_info:
+                    self.get_clippy_values()
+                else:
+                    self.crop_start = 0
+                    self.crop_end = self.frames
             except MemoryError:
                 logging.warning(f"Failed to show waveform - file too large")
                 self.widget_canvas.itemconfig(self.loading_text, text="Can't display waveform")
@@ -296,21 +302,22 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
             else:
                 offset1 = x * frames_per_pixel
                 offset2 = offset1 + frames_per_pixel
-            for channel in range(self.channels):
+            for chan in range(self.channels):
                 # For each audio channel
                 v1[0:] = [0.0] * self.channels
                 v2[0:] = [0.0] * self.channels
                 frame = offset1
                 while int(frame) < int(offset2):
                     # Find peak audio within block of audio represented by this x-axis pixel
-                    av = a_data[int(frame)][channel] * self.v_zoom
-                    if av < v1[channel]:
-                        v1[channel] = av
-                    if av > v2[channel]:
-                        v2[channel] = av
+                    av = a_data[int(frame)][chan] * self.v_zoom
+                    if av < v1[chan]:
+                        v1[chan] = av
+                    if av > v2[chan]:
+                        v2[chan] = av
                     frame += step
-                data[channel] += (x, y_offsets[channel] + int(v1[channel] * y0),
-                                  x, y_offsets[channel] + int(v2[channel] * y0))
+                y1 = int(y_offsets[chan] + v1[chan] * y0)
+                y2 = int(y_offsets[chan] + v2[chan] * y0)
+                data[chan] += [x, y1, x, y2]
 
         for chan in range(self.channels):
             # Plot each point on the graph as series of vertical lines spanning max and min peaks of audio represented by each x-axis pixel
@@ -327,7 +334,6 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
         self.refreshing = True
 
         refresh_info = False
-        update_markers = False
 
         if "zoom" in self.monitors and self.zoom != self.monitors["zoom"]:
             self.zoom = self.monitors["zoom"]
@@ -344,25 +350,25 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
 
         if "crop_start" in self.monitors and self.crop_start != self.monitors["crop_start"]:
                 self.crop_start = self.monitors["crop_start"]
-                update_markers = True
+                self.update_markers = True
                 self.refresh_waveform = True
                 if self.auto_offset:
                     self.auto_offset = 1
 
         if "crop_end" in self.monitors and self.crop_end != self.monitors["crop_end"]:
                 self.crop_end = self.monitors["crop_end"]
-                update_markers = True
+                self.update_markers = True
                 self.refresh_waveform = True
                 if self.auto_offset:
                     self.auto_offset = 2
 
         if "warp" in self.monitors and self.warp != self.monitors["warp"]:
                 self.warp = self.monitors["warp"]
-                update_markers = True
+                self.update_markers = True
 
         if "beats" in self.monitors and self.beats != self.monitors["beats"]:
                 self.beats = self.monitors["beats"]
-                update_markers = True
+                self.update_markers = True
 
         if "gain" in self.monitors and self.gain != self.monitors["gain"]:
                 self.gain = self.monitors["gain"]
@@ -390,13 +396,13 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
                 self.offset = max(self.offset, 0)
                 self.draw_waveform(self.offset, length, self.gain)
                 refresh_info = True
-                update_markers = True
+                self.update_markers = True
                 self.refresh_waveform = False
 
             if self.frames:
                 h = self.waveform_height
                 f = self.width / self.frames * self.zoom
-                if update_markers:
+                if self.update_markers:
                     # Crop markers
                     x1 = int(f * (self.crop_start - self.offset))
                     x2 = int(f * (self.crop_end - self.offset))
@@ -405,9 +411,18 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
                     # Beat markers
                     self.widget_canvas.delete("beat_markers")
                     if self.beats > 0:  #  and self.warp
+                        # Get Beats Per Bar
+                        beats_per_bar = self.zyngui.state_manager.zynseq.get_sequence_param(self.clip_info[0], self.clip_info[1], zynseq.PHRASE_CHANNEL, "bpb")
+                        if beats_per_bar < 1:
+                            beats_per_bar = self.zyngui.state_manager.zynseq.bpb
                         for i in range(1, self.beats):
                             x = x1 + i * (x2 - x1) // self.beats
-                            self.widget_canvas.create_line(x, 0, x, h, fill=self.bmarker_color, dash=(4, 4), tags="beat_markers")
+                            if i % beats_per_bar == 0:
+                                dash = None
+                            else:
+                                dash = (2, 2)
+                            self.widget_canvas.create_line(x, 0, x, h, fill=self.bmarker_color, dash=dash, tags="beat_markers")
+                        #self.widget_canvas.tag_raise("beat_markers")
                 # Playing cursor (implemented for clippy)
                 if self.clip_info:
                     # Playing cursor
@@ -416,7 +431,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
                         progress = self.zyngui.state_manager.zynseq.progress[self.zctrl.processor.midi_chan]
                     else:
                         progress = 0
-                    if self.last_progress != progress or update_markers:
+                    if self.last_progress != progress or self.update_markers:
                         self.last_progress = progress
                         current_frame = self.crop_start + int(progress * (self.crop_end - self.crop_start) / 100) - self.offset
                         x = int(f * current_frame)
@@ -433,6 +448,7 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
             # logging.error(e)
             logging.exception(traceback.format_exc())
 
+        self.update_markers = False
         self.refreshing = False
 
     @staticmethod
@@ -475,6 +491,22 @@ class zynthian_widget_audio_file(zynthian_widget_base.zynthian_widget_base):
             return (scene, phrase, midi_chan)
         else:
             return None
+
+    def get_clippy_values(self):
+        if self.clip_info:
+            try:
+                zctrls = self.processor.controllers_dict
+                note = self.clip_info[1] + 1
+                self.zoom = zctrls[f"zoom {note}"].value
+                self.crop_start = zctrls[f"crop_start {note}"].value
+                self.crop_end = zctrls[f"crop_end {note}"].value
+                self.warp = zctrls[f"warp {note}"].value
+                self.beats = zctrls[f"beats {note}"].value
+                self.gain = zctrls[f"gain {note}"].value
+                self.processor.engine.reset_monitors()
+                self.update_markers = True
+            except Exception as e:
+                logging.error(f"Can't get clip audio values for clip {self.clip_info} => {e}")
 
     def cuia_toggle_record(self, param=None):
         # Handle transport for clippy

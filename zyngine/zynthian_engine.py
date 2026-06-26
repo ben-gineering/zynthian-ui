@@ -27,10 +27,10 @@ import re
 import json
 import glob
 import copy
-import liblo
 import logging
 import pexpect
 import fnmatch
+import pyliblo3 as liblo
 from time import sleep
 
 import zynconf
@@ -219,6 +219,9 @@ class zynthian_engine(zynthian_basic_engine):
 
     def get_monitors_dict(self):
         return self.monitors_dict
+
+    def reset_monitors(self):
+        self.monitors_dict = {}
 
     # ---------------------------------------------------------------------------
     # OSC Management

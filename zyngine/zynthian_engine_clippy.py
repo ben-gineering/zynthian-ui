@@ -30,11 +30,11 @@ import logging
 from threading import Timer
 from collections import deque
 
+import zynautoconnect
 from zynlibs.zynseq import zynseq
 from zyngine.zynthian_engine import zynthian_engine
 from zyngine.zynthian_signal_manager import zynsigman
 from zyngine.zynthian_controller import zynthian_controller
-import zynautoconnect
 
 
 # ------------------------------------------------------------------------------
@@ -148,14 +148,8 @@ class zynthian_engine_clippy(zynthian_engine):
             case 0:
                 self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "repeat", 0)
             case 1:
-                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "mode", 0x01)
-                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "followAction", zynseq.FOLLOW_ACTION_RELATIVE)
-                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "followParam", 0)
-                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "repeat", 1)
+                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "repeat", 255)
             case _:
-                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "mode", 0x01)
-                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "followAction", zynseq.FOLLOW_ACTION_NONE)
-                self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "followParam", 0)
                 self.zynseq.set_sequence_param(self.zynseq.scene, phrase, chan, "repeat", mode - 1)
         self.libseq.updateSequenceInfo()
 

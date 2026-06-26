@@ -282,19 +282,12 @@ class zynthian_gui_launcher_pad():
                         empty = True
                         timesig = "1"
 
-                match state_seq["followAction"]:
-                    case zynseq.FOLLOW_ACTION_NONE:
-                        if state_seq["repeat"] <= 1:
-                            mode_text = "↦"
-                        elif state_seq["repeat"] > 1:
-                            mode_text = "x" + str(state_seq["repeat"])
-                    case zynseq.FOLLOW_ACTION_RELATIVE:
-                        if state_seq["followParam"] == 0:
-                            mode_text = "↻"
-                        else:
-                            mode_text = "→"
-                    case _:
-                        mode_text = "→"
+                if state_seq["repeat"] == 1:
+                    mode_text = "↦"
+                elif state_seq["repeat"] == 255:
+                    mode_text = "↻"
+                elif state_seq["repeat"] > 1:
+                    mode_text = "x" + str(state_seq["repeat"])
 
                 # Launcher background color
                 if empty:
@@ -1986,7 +1979,7 @@ class zynthian_gui_mixer(zynthian_gui_base):
     def get_phrase_title(self, phrase):
         title = self.zynseq.state["scenes"][self.zynseq.scene]["phrases"][phrase]["name"]
         if not title:
-            title = f"Phrase {phrase}"
+            title = f"Phrase {phrase + 1}"
         return title
 
     def get_follow_info(self, phrase):
